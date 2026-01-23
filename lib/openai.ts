@@ -1,0 +1,1 @@
+export async function generateProjectFromPrompt(prompt: string) { return {}; }
