@@ -1,1 +1,5 @@
-export async function generateProjectFromPrompt(prompt: string) { return {}; }
+import OpenAI from "openai";
+
+export const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
+});
