@@ -1,72 +1,66 @@
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import ReactMarkdown from "react-markdown";
 
-export default function ProjectWorksLanding(): JSX.Element {
+export default function ProjectWorksLanding() {
   const [prompt, setPrompt] = useState("");
   const [result, setResult] = useState("");
   const [loading, setLoading] = useState(false);
 
   const generatePlan = async () => {
+    if (!prompt.trim()) return;
+
     setLoading(true);
     setResult("");
 
-    const res = await fetch("/api/generate", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ prompt }),
-    });
+    try {
+      const res = await fetch("/api/generate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ prompt }),
+      });
 
-    const data = await res.json();
-    setResult(data.result || "No output generated");
-    setLoading(false);
+      const data = await res.json();
+      setResult(data.result || "No output generated.");
+    } catch (err) {
+      setResult("Error generating project plan.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div style={{ padding: 40, fontFamily: "Arial, sans-serif" }}>
-      <h1 style={{ fontSize: 32, marginBottom: 20 }}>
-        Generate Project Plan
-      </h1>
+    <main style={{ padding: 40, fontFamily: "Arial, sans-serif" }}>
+      <h1>Generate Project Plan</h1>
 
       <textarea
-        rows={6}
-        style={{ width: "100%", padding: 10 }}
-        placeholder="Describe the project requirements..."
+        rows={8}
+        style={{ width: "100%", padding: 10, marginBottom: 12 }}
+        placeholder="Paste project requirements or bidding document text here..."
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
       />
-
-      <br />
 
       <button
         onClick={generatePlan}
         disabled={loading}
         style={{
-          marginTop: 15,
           padding: "10px 20px",
-          fontSize: 16,
           cursor: "pointer",
+          fontWeight: "bold",
         }}
       >
         {loading ? "Generating..." : "Generate Project Plan"}
       </button>
 
       {result && (
-        <div
-          style={{
-            marginTop: 30,
-            padding: 20,
-            border: "1px solid #ddd",
-            borderRadius: 8,
-            background: "#ffffff",
-          }}
-        >
+        <section style={{ marginTop: 40 }}>
           <ReactMarkdown>{result}</ReactMarkdown>
-        </div>
+        </section>
       )}
-    </div>
+    </main>
   );
 }
