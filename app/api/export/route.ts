@@ -202,9 +202,11 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
   const marginTwip = convertInchesToTwip(1.0);
   const doc = new Document({
     styles: {
-      document: {
-        run: { font: "Calibri", size: 22 },
-        paragraph: { spacing: { after: SPACE_AFTER_PARAGRAPH } },
+      default: {
+        document: {
+          run: { font: "Calibri", size: 22 },
+          paragraph: { spacing: { after: SPACE_AFTER_PARAGRAPH } },
+        },
       },
     },
     sections: [
@@ -242,7 +244,8 @@ export async function POST(req: Request) {
 
     if (format === "docx") {
       const buffer = await buildDocx(plan);
-      return new NextResponse(buffer, {
+      const body = new Uint8Array(buffer) as unknown as BodyInit;
+      return new NextResponse(body, {
         headers: {
           "Content-Type":
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
