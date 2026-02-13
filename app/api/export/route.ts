@@ -148,7 +148,7 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
       children.push(
         new Table({
           rows: tableRows,
-          width: { size: 100, type: "PERCENTAGE" },
+          width: { size: 100, type: "pct" },
         })
       );
     } else {
