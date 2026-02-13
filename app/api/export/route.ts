@@ -59,7 +59,7 @@ function bodyParagraphs(text: string) {
 }
 
 async function buildDocx(plan: PlanPayload): Promise<Buffer> {
-  const children: Paragraph[] = [];
+  const children: (Paragraph | Table)[] = [];
 
   children.push(
     new Paragraph({
