@@ -1,1 +1,31 @@
-datasource db { provider = "postgresql" url = env("DATABASE_URL") }
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+  plans     Plan[]
+}
+
+model Plan {
+  id          String   @id @default(cuid())
+  userId      String
+  prompt      String
+  overview    String
+  scope       String
+  methodology String
+  timeline    String
+  deliverables String
+  risks       String
+  assumptions String
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}

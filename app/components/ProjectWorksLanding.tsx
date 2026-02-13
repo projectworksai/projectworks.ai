@@ -1,66 +1,72 @@
 "use client";
 
 import { useState } from "react";
-import ReactMarkdown from "react-markdown";
 
 export default function ProjectWorksLanding() {
   const [prompt, setPrompt] = useState("");
-  const [result, setResult] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [output, setOutput] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const generatePlan = async () => {
-    if (!prompt.trim()) return;
-
+  async function generate() {
     setLoading(true);
-    setResult("");
+    setOutput("");
+
+    const formData = new FormData();
+    formData.append("prompt", prompt);
+    if (file) formData.append("file", file);
 
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ prompt }),
+        body: formData,
       });
 
       const data = await res.json();
-      setResult(data.result || "No output generated.");
-    } catch (err) {
-      setResult("Error generating project plan.");
+      setOutput(data.output || data.error || "No output");
+    } catch (err: any) {
+      setOutput(err.message || "Something went wrong");
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
-    <main style={{ padding: 40, fontFamily: "Arial, sans-serif" }}>
-      <h1>Generate Project Plan</h1>
+    <div style={{ padding: 40, maxWidth: 800 }}>
+      <h1>ProjectWorks AI</h1>
 
       <textarea
-        rows={8}
-        style={{ width: "100%", padding: 10, marginBottom: 12 }}
-        placeholder="Paste project requirements or bidding document text here..."
+        placeholder="Type your project requirements or tender summary…"
         value={prompt}
         onChange={(e) => setPrompt(e.target.value)}
+        rows={6}
+        style={{ width: "100%", marginBottom: 10 }}
       />
 
-      <button
-        onClick={generatePlan}
-        disabled={loading}
-        style={{
-          padding: "10px 20px",
-          cursor: "pointer",
-          fontWeight: "bold",
-        }}
-      >
+      <input
+        type="file"
+        onChange={(e) => setFile(e.target.files?.[0] || null)}
+      />
+
+      <br />
+      <br />
+
+      <button onClick={generate} disabled={loading}>
         {loading ? "Generating..." : "Generate Project Plan"}
       </button>
 
-      {result && (
-        <section style={{ marginTop: 40 }}>
-          <ReactMarkdown>{result}</ReactMarkdown>
-        </section>
-      )}
-    </main>
+      <div
+        style={{
+          marginTop: 20,
+          padding: 20,
+          background: "#f7f7f7",
+          borderRadius: 6,
+          whiteSpace: "pre-wrap",
+          fontFamily: "monospace",
+        }}
+      >
+        {output}
+      </div>
+    </div>
   );
 }
