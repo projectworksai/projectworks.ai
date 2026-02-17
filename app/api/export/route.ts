@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import {
   Document,
   HeadingLevel,
@@ -231,6 +233,15 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
 
 export async function POST(req: Request) {
   try {
+    const session = await getServerSession(authOptions);
+    const tier = (session?.user as { plan?: "FREE" | "PRO" } | undefined)?.plan ?? "FREE";
+    if (tier !== "PRO") {
+      return NextResponse.json(
+        { success: false, error: "Pro subscription required to download Word documents" },
+        { status: 402 }
+      );
+    }
+
     const body = await req.json();
     const plan: PlanPayload = body.plan || {};
     const format = body.format as string;

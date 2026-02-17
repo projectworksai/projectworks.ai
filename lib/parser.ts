@@ -280,6 +280,7 @@ export function getMainSectionsOnly(
 
   const result: Record<string, string> = {};
   for (const key of OUTLINE_SECTION_KEYS) {
+    if (!(key in data)) continue;
     const v = data[key];
     let text = typeof v === "string" ? v : v != null ? String(v) : "";
     text = sanitizeSectionValue(key, text);

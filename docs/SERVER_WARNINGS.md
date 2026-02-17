@@ -17,11 +17,11 @@
     - macOS/Linux: `NODE_OPTIONS=--no-deprecation npm run dev`  
   - Optional: add a script in `package.json`, e.g. `"dev:quiet": "set NODE_OPTIONS=--no-deprecation&& next dev"` (Windows) or `"dev:quiet": "NODE_OPTIONS=--no-deprecation next dev"` (macOS/Linux).
 
-## "Primary model failed. Switching to fallback..."
+## "Primary model failed" / API errors
 
-- **Meaning:** The first model (e.g. `anthropic/claude-3-haiku`) returned an error; the server then tried the fallback model (e.g. `mistralai/mistral-7b-instruct`).
+- **Meaning:** The DeepSeek Chat API returned an error (e.g. invalid key, quota, or timeout).
 - **Check logs:** The server now logs the primary failure reason, e.g.:
-  - `401` / invalid key → fix `OPENAI_API_KEY` or OpenRouter key.
+  - `401` / invalid key → set `DEEPSEEK_API_KEY` in `.env` (get key at https://platform.deepseek.com).
   - `429` → rate limit; wait or use another model.
   - `ETIMEDOUT` / timeout → request too large or slow; shorten input or increase timeout.
 - **Action:** Fix the reported error (key, quota, or timeout). If the fallback succeeds, generation still works.
