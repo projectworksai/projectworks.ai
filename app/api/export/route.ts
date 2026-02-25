@@ -1,6 +1,4 @@
 import { NextResponse } from "next/server";
-import { getServerSession } from "next-auth";
-import { authOptions } from "@/lib/auth";
 import {
   Document,
   HeadingLevel,
@@ -231,52 +229,49 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
   return Packer.toBuffer(doc);
 }
 
+function errorResponse(code: string, message: string, status: number) {
+  return NextResponse.json({ success: false, code, message }, { status });
+}
+
 export async function POST(req: Request) {
   try {
-    const session = await getServerSession(authOptions);
-    const tier = (session?.user as { plan?: "FREE" | "PRO" } | undefined)?.plan ?? "FREE";
-    if (tier !== "PRO") {
-      return NextResponse.json(
-        { success: false, error: "Pro subscription required to download Word documents" },
-        { status: 402 }
-      );
-    }
-
-    const body = await req.json();
-    const plan: PlanPayload = body.plan || {};
-    const format = body.format as string;
+    const body = await req.json().catch(() => ({}));
+    const plan: PlanPayload = body?.plan ?? {};
+    const format = (body?.format as string) || "docx";
 
     if (!plan || typeof plan !== "object") {
-      return NextResponse.json(
-        { success: false, error: "Plan data is required" },
-        { status: 400 }
-      );
+      return errorResponse("MISSING_PLAN", "Plan data is required", 400);
     }
 
     if (format === "docx") {
-      const buffer = await buildDocx(plan);
-      const body = new Uint8Array(buffer) as unknown as BodyInit;
-      return new NextResponse(body, {
-        headers: {
-          "Content-Type":
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-          "Content-Disposition": 'attachment; filename="project-plan.docx"',
-        },
-      });
+      try {
+        const buffer = await buildDocx(plan);
+        const bodyBytes = new Uint8Array(buffer) as unknown as BodyInit;
+        return new NextResponse(bodyBytes, {
+          headers: {
+            "Content-Type":
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "Content-Disposition": 'attachment; filename="project-plan.docx"',
+          },
+        });
+      } catch (docxError) {
+        console.warn("DOCX export failed, falling back to JSON:", docxError);
+      }
     }
 
-    return NextResponse.json(
-      { success: false, error: "Invalid format. Use docx." },
-      { status: 400 }
-    );
+    const json = JSON.stringify(plan, null, 2);
+    return new NextResponse(json, {
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Disposition": 'attachment; filename="project-plan.json"',
+      },
+    });
   } catch (error: unknown) {
     console.error("Export error:", error);
-    return NextResponse.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : "Failed to generate export",
-      },
-      { status: 500 }
+    return errorResponse(
+      "EXPORT_FAILED",
+      error instanceof Error ? error.message : "Failed to generate export",
+      500
     );
   }
 }
