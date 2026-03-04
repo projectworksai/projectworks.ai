@@ -31,6 +31,7 @@ export default function Home() {
   const [authMode, setAuthMode] = useState<"signin" | "signup" | null>(null);
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
+  const [authEmailConfirm, setAuthEmailConfirm] = useState("");
   const [authName, setAuthName] = useState("");
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
@@ -57,7 +58,7 @@ export default function Home() {
       if (tenderFile) formData.append("tenderDocument", tenderFile);
       if (technicalSpecFile) formData.append("technicalSpecification", technicalSpecFile);
 
-      const res = await fetch("/api/generate", {
+    const res = await fetch("/api/generate", {
         method: "POST",
         body: formData,
       });
@@ -89,8 +90,8 @@ export default function Home() {
     setError("");
     try {
       const res = await fetch("/api/export", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ plan: data, format: "docx" }),
       });
       const errData = await res.json().catch(() => ({}));
@@ -154,8 +155,27 @@ export default function Home() {
   const handleSignUp = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     setAuthError("");
-    if (authPassword.length < 8) {
-      setAuthError("Password must be at least 8 characters");
+    const email = authEmail.trim().toLowerCase();
+    const emailConfirm = authEmailConfirm.trim().toLowerCase();
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailPattern.test(email)) {
+      setAuthError("Please enter a valid email address.");
+      return;
+    }
+    if (email !== emailConfirm) {
+      setAuthError("Email and confirmation email must match.");
+      return;
+    }
+    const pwd = authPassword;
+    const issues: string[] = [];
+    if (pwd.length < 10) issues.push("at least 10 characters");
+    if (!/[a-z]/.test(pwd)) issues.push("one lowercase letter");
+    if (!/[A-Z]/.test(pwd)) issues.push("one uppercase letter");
+    if (!/[0-9]/.test(pwd)) issues.push("one number");
+    if (!/[^A-Za-z0-9]/.test(pwd)) issues.push("one symbol");
+    if (issues.length) {
+      setAuthError(`Password must include ${issues.join(", ")}.`);
       return;
     }
     setAuthLoading(true);
@@ -164,19 +184,19 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          email: authEmail.trim().toLowerCase(),
-          password: authPassword,
+          email,
+          password: pwd,
           name: authName.trim() || undefined,
         }),
       });
-      const json = await res.json();
+      const json = await res.json().catch(() => ({}));
       if (!res.ok) {
-        setAuthError(json.error || "Sign up failed");
+        setAuthError(json.message || json.error || "We couldn't create your account. Please try again.");
         return;
       }
       const signInResult = await signIn("credentials", {
-        email: authEmail.trim().toLowerCase(),
-        password: authPassword,
+        email,
+        password: pwd,
         redirect: false,
       });
       if (signInResult?.error) {
@@ -185,6 +205,7 @@ export default function Home() {
       }
       setAuthMode(null);
       setAuthEmail("");
+      setAuthEmailConfirm("");
       setAuthPassword("");
       setAuthName("");
     } catch {
@@ -406,6 +427,27 @@ export default function Home() {
                         }}
                       />
                     </div>
+                    {authMode === "signup" && (
+                      <div>
+                        <label style={{ display: "block", fontSize: 11, fontWeight: 500, color: "#64748b", marginBottom: 4 }}>Confirm email</label>
+                        <input
+                          type="email"
+                          value={authEmailConfirm}
+                          onChange={(e) => setAuthEmailConfirm(e.target.value)}
+                          placeholder="Repeat your email"
+                          required
+                          style={{
+                            width: "100%",
+                            boxSizing: "border-box",
+                            padding: "8px 10px",
+                            fontSize: 13,
+                            border: "1px solid #e2e8f0",
+                            borderRadius: 6,
+                            fontFamily: "inherit",
+                          }}
+                        />
+                      </div>
+                    )}
                     <div>
                       <label style={{ display: "block", fontSize: 11, fontWeight: 500, color: "#64748b", marginBottom: 4 }}>Password</label>
                       <input
@@ -424,6 +466,11 @@ export default function Home() {
                           fontFamily: "inherit",
                         }}
                       />
+                      {authMode === "signup" && (
+                        <p style={{ marginTop: 4, fontSize: 11, color: "#94a3b8" }}>
+                          Use at least 10 characters, including upper & lower case letters, a number, and a symbol.
+                        </p>
+                      )}
                     </div>
                     {authError && (
                       <p style={{ fontSize: 12, color: "#b91c1c" }}>{authError}</p>
@@ -550,9 +597,9 @@ export default function Home() {
             <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "#334155", marginBottom: 6 }}>
               Project brief
             </label>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
+      <textarea
+        value={prompt}
+        onChange={(e) => setPrompt(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Paste or type your project brief..."
               rows={5}
