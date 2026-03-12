@@ -295,6 +295,7 @@ export default function Home() {
           throw new Error(json?.message || "Chat assistant is unavailable.");
         }
         setChatAnswer(json.answer || "");
+        setChatQuestion("");
       } catch (err) {
         setChatError(
           err instanceof Error && err.name === "AbortError"
@@ -1114,6 +1115,14 @@ export default function Home() {
                 rows={2}
                 value={chatQuestion}
                 onChange={(e) => setChatQuestion(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (!chatLoading) {
+                      void handleChatSubmit(e);
+                    }
+                  }
+                }}
                 placeholder="Ask a question…"
                 style={{
                   resize: "none",
