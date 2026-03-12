@@ -278,12 +278,18 @@ export default function Home() {
         return;
       }
       setChatLoading(true);
+      setChatAnswer("");
       try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 20000);
+
         const res = await fetch("/api/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ question: q }),
+          signal: controller.signal,
         });
+        clearTimeout(timeout);
         const json = await res.json().catch(() => ({}));
         if (!res.ok || !json?.success) {
           throw new Error(json?.message || "Chat assistant is unavailable.");
@@ -291,7 +297,11 @@ export default function Home() {
         setChatAnswer(json.answer || "");
       } catch (err) {
         setChatError(
-          err instanceof Error ? err.message : "Chat assistant is unavailable."
+          err instanceof Error && err.name === "AbortError"
+            ? "The assistant is taking longer than expected. Please try again in a moment."
+            : err instanceof Error
+            ? err.message
+            : "Chat assistant is unavailable."
         );
       } finally {
         setChatLoading(false);
