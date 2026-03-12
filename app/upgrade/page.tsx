@@ -89,7 +89,7 @@ export default function UpgradePage() {
 
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               <a
-                href="mailto:thesmartaustralia@gmail.com?subject=Plan%20Forge%20Pro%20enquiry"
+                href="mailto:Project%20Works%20Team%20<thesmartaustralia@gmail.com>?subject=Plan%20Forge%20Pro%20enquiry"
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
