@@ -104,7 +104,7 @@ export default function UpgradePage() {
                   textDecoration: "none",
                 }}
               >
-                Email us about Pro
+                Project Works Team (thesmartaustralia@gmail.com)
               </a>
               <a
                 href="/"
