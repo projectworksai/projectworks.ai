@@ -36,6 +36,11 @@ export default function Home() {
   const [authName, setAuthName] = useState("");
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatQuestion, setChatQuestion] = useState("");
+  const [chatAnswer, setChatAnswer] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const [chatError, setChatError] = useState("");
 
   const isPro = (session?.user as { plan?: string } | undefined)?.plan === "PRO";
 
@@ -263,6 +268,38 @@ export default function Home() {
   const mainSections = data ? getMainSectionsOnly(data) : {};
   const hasSections = Object.keys(mainSections).length > 0;
 
+  const handleChatSubmit = useCallback(
+    async (e: React.FormEvent) => {
+      e.preventDefault();
+      setChatError("");
+      const q = chatQuestion.trim();
+      if (!q) {
+        setChatError("Please type a question.");
+        return;
+      }
+      setChatLoading(true);
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: q }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || !json?.success) {
+          throw new Error(json?.message || "Chat assistant is unavailable.");
+        }
+        setChatAnswer(json.answer || "");
+      } catch (err) {
+        setChatError(
+          err instanceof Error ? err.message : "Chat assistant is unavailable."
+        );
+      } finally {
+        setChatLoading(false);
+      }
+    },
+    [chatQuestion]
+  );
+
   return (
     <main
       style={{
@@ -270,6 +307,7 @@ export default function Home() {
         background: "linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)",
         fontFamily: "var(--font-dm-sans), 'DM Sans', system-ui, sans-serif",
         color: "#0f172a",
+        position: "relative",
       }}
     >
       <header
@@ -955,6 +993,148 @@ export default function Home() {
             )}
           </div>
         </section>
+      </div>
+      {/* Chat assistant */}
+      <div
+        style={{
+          position: "fixed",
+          right: 24,
+          bottom: 24,
+          zIndex: 40,
+        }}
+      >
+        {!chatOpen ? (
+          <button
+            type="button"
+            onClick={() => setChatOpen(true)}
+            style={{
+              padding: "10px 14px",
+              borderRadius: 999,
+              border: "none",
+              background: "#0f172a",
+              color: "#f9fafb",
+              fontSize: 13,
+              fontWeight: 500,
+              boxShadow: "0 10px 25px rgba(15,23,42,0.35)",
+              cursor: "pointer",
+              fontFamily: "inherit",
+            }}
+          >
+            Ask ProjectWorks assistant
+          </button>
+        ) : (
+          <section
+            style={{
+              width: 320,
+              maxHeight: 420,
+              borderRadius: 16,
+              border: "1px solid #e2e8f0",
+              background: "#ffffff",
+              boxShadow: "0 18px 45px rgba(15,23,42,0.18)",
+              display: "flex",
+              flexDirection: "column",
+              overflow: "hidden",
+            }}
+          >
+            <header
+              style={{
+                padding: "10px 14px",
+                borderBottom: "1px solid #e2e8f0",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 8,
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>ProjectWorks assistant</div>
+                <div style={{ fontSize: 11, color: "#64748b" }}>
+                  Ask about the app or project management.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setChatOpen(false)}
+                style={{
+                  border: "none",
+                  background: "transparent",
+                  cursor: "pointer",
+                  fontSize: 16,
+                  color: "#94a3b8",
+                }}
+              >
+                ×
+              </button>
+            </header>
+            <div
+              style={{
+                padding: "10px 14px",
+                flex: 1,
+                overflow: "auto",
+                fontSize: 13,
+                color: "#0f172a",
+              }}
+            >
+              {!chatAnswer && !chatError && (
+                <p style={{ margin: 0, color: "#64748b" }}>
+                  Examples: &quot;How do I generate a plan from a PDF tender?&quot; or &quot;How should I phase a
+                  pavement rehab project?&quot;
+                </p>
+              )}
+              {chatAnswer && (
+                <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>
+                  {chatAnswer}
+                </p>
+              )}
+              {chatError && (
+                <p style={{ marginTop: 6, fontSize: 12, color: "#b91c1c" }}>{chatError}</p>
+              )}
+            </div>
+            <form
+              onSubmit={handleChatSubmit}
+              style={{
+                padding: "8px 10px 10px",
+                borderTop: "1px solid #e2e8f0",
+                display: "flex",
+                flexDirection: "column",
+                gap: 6,
+              }}
+            >
+              <textarea
+                rows={2}
+                value={chatQuestion}
+                onChange={(e) => setChatQuestion(e.target.value)}
+                placeholder="Ask a question…"
+                style={{
+                  resize: "none",
+                  fontSize: 13,
+                  padding: "6px 8px",
+                  borderRadius: 8,
+                  border: "1px solid #e2e8f0",
+                  fontFamily: "inherit",
+                }}
+              />
+              <button
+                type="submit"
+                disabled={chatLoading}
+                style={{
+                  alignSelf: "flex-end",
+                  padding: "6px 10px",
+                  borderRadius: 999,
+                  border: "none",
+                  fontSize: 12,
+                  fontWeight: 500,
+                  background: chatLoading ? "#cbd5e1" : "#0f172a",
+                  color: "#f9fafb",
+                  cursor: chatLoading ? "wait" : "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                {chatLoading ? "Thinking…" : "Send"}
+              </button>
+            </form>
+          </section>
+        )}
       </div>
     </main>
   );
