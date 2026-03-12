@@ -668,7 +668,7 @@ export default function Home() {
             <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "#334155", marginBottom: 6 }}>
               Tender document
             </label>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
               <input
                 type="file"
                 accept=".pdf,.doc,.docx,.txt"
@@ -676,12 +676,29 @@ export default function Home() {
                 style={{ fontSize: 12 }}
               />
               <span style={{ fontSize: 12, color: "#64748b" }}>{tenderFile ? tenderFile.name : "—"}</span>
+              {tenderFile && (
+                <button
+                  type="button"
+                  onClick={() => setTenderFile(null)}
+                  style={{
+                    fontSize: 11,
+                    padding: "4px 8px",
+                    borderRadius: 999,
+                    border: "1px solid #e2e8f0",
+                    background: "#f8fafc",
+                    color: "#64748b",
+                    cursor: "pointer",
+                  }}
+                >
+                  Remove
+                </button>
+              )}
             </div>
 
             <label style={{ display: "block", fontSize: 12, fontWeight: 500, color: "#334155", marginBottom: 6 }}>
               Technical specification
             </label>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
               <input
                 type="file"
                 accept=".pdf,.doc,.docx,.txt"
@@ -689,6 +706,23 @@ export default function Home() {
                 style={{ fontSize: 12 }}
               />
               <span style={{ fontSize: 12, color: "#64748b" }}>{technicalSpecFile ? technicalSpecFile.name : "—"}</span>
+              {technicalSpecFile && (
+                <button
+                  type="button"
+                  onClick={() => setTechnicalSpecFile(null)}
+                  style={{
+                    fontSize: 11,
+                    padding: "4px 8px",
+                    borderRadius: 999,
+                    border: "1px solid #e2e8f0",
+                    background: "#f8fafc",
+                    color: "#64748b",
+                    cursor: "pointer",
+                  }}
+                >
+                  Remove
+                </button>
+              )}
             </div>
 
             <button
