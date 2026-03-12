@@ -24,6 +24,78 @@ const SPACE_BEFORE_HEADING = 240;
 
 type PlanPayload = Record<string, unknown>;
 
+type ScheduleItem = {
+  id?: number | string;
+  wbs?: string;
+  name?: string;
+  phase?: string;
+  durationDays?: number;
+  startOffsetDays?: number;
+  dependencies?: Array<number | string>;
+};
+
+function toDateString(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function buildScheduleCsv(plan: PlanPayload, projectStartDate?: string): string {
+  const raw = plan["schedule"];
+  if (!Array.isArray(raw) || raw.length === 0) {
+    return "Task ID,Task Name,Phase,WBS,Duration (days),Start,Finish,Predecessors,Notes\n";
+  }
+
+  const start = projectStartDate ? new Date(projectStartDate) : new Date();
+  const items: ScheduleItem[] = raw as ScheduleItem[];
+
+  const rows: string[] = [];
+  rows.push("Task ID,Task Name,Phase,WBS,Duration (days),Start,Finish,Predecessors,Notes");
+
+  for (const item of items) {
+    const id = item.id ?? "";
+    const name = (item.name ?? "").toString().replace(/"/g, '""');
+    const phase = (item.phase ?? "").toString().replace(/"/g, '""');
+    const wbs = (item.wbs ?? "").toString().replace(/"/g, '""');
+    const duration = Number.isFinite(item.durationDays ?? NaN) ? String(item.durationDays) : "";
+
+    const offset = Number.isFinite(item.startOffsetDays ?? NaN) ? (item.startOffsetDays as number) : 0;
+    const startDate = new Date(start.getTime());
+    startDate.setDate(startDate.getDate() + offset);
+    const startStr = toDateString(startDate);
+    const finishDate = new Date(startDate.getTime());
+    if (Number.isFinite(item.durationDays ?? NaN) && (item.durationDays as number) > 0) {
+      finishDate.setDate(finishDate.getDate() + (item.durationDays as number));
+    }
+    const finishStr = toDateString(finishDate);
+
+    const predecessors = Array.isArray(item.dependencies)
+      ? item.dependencies.map((p) => String(p)).join(";")
+      : "";
+
+    const notes = (plan["constructionSchedule"] ?? "")
+      .toString()
+      .split("\n")
+      .find((line) => line.toLowerCase().includes((item.name ?? "").toString().toLowerCase()))
+      ?? "";
+
+    const safeNotes = notes.replace(/"/g, '""');
+
+    const row = [
+      `"${id}"`,
+      `"${name}"`,
+      `"${phase}"`,
+      `"${wbs}"`,
+      `"${duration}"`,
+      `"${startStr}"`,
+      `"${finishStr}"`,
+      `"${predecessors}"`,
+      `"${safeNotes}"`,
+    ].join(",");
+    rows.push(row);
+  }
+
+  return rows.join("\r\n");
+}
+
 function bodyParagraphs(text: string) {
   const value = String(text ?? "").trim();
   if (!value) {
@@ -238,6 +310,10 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}));
     const plan: PlanPayload = body?.plan ?? {};
     const format = (body?.format as string) || "docx";
+    const projectStartDate =
+      typeof body?.projectStartDate === "string" && body.projectStartDate
+        ? body.projectStartDate
+        : undefined;
 
     if (!plan || typeof plan !== "object") {
       return errorResponse("MISSING_PLAN", "Plan data is required", 400);
@@ -257,6 +333,16 @@ export async function POST(req: Request) {
       } catch (docxError) {
         console.warn("DOCX export failed, falling back to JSON:", docxError);
       }
+    }
+
+    if (format === "schedule_csv") {
+      const csv = buildScheduleCsv(plan, projectStartDate);
+      return new NextResponse(csv, {
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": 'attachment; filename="project-schedule.csv"',
+        },
+      });
     }
 
     const json = JSON.stringify(plan, null, 2);

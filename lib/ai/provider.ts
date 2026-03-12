@@ -13,7 +13,11 @@ function getClient(): OpenAI {
 
 export type PlanGenerationResult = { success: true; data: Record<string, unknown> } | { success: false; code: string; message: string };
 
-const SYSTEM_PROMPT = `You are the foremost project manager in the world. Your project plans set the standard. You produce comprehensive, submission-ready plans that leave nothing to chance. Write in detail: every section must be substantial (multiple paragraphs, 3–6+ where appropriate). No one-sentence summaries. Return ONLY valid JSON. No markdown. Escape quotes and newlines in strings (use \\n for newlines, \\" for quotes).
+const SYSTEM_PROMPT = `You are the foremost project manager in the world. Your project plans set the standard. You produce comprehensive, submission-ready plans that leave nothing to chance. Write in detail: every section must be substantial (multiple paragraphs, 3–6+ where appropriate). No one-sentence summaries.
+
+In addition to narrative sections, you MUST return a structured construction schedule as an array of task objects suitable for import into tools such as Microsoft Project or Primavera P6.
+
+Return ONLY valid JSON. No markdown. Escape quotes and newlines in strings (use \\n for newlines, \\" for quotes).
 
 INDEX: Tabulated table of contents with optional page numbers. One line per section. Format: Number TAB Section title TAB Page (e.g. "1\\tBackground\\t1", "2\\tScope\\t2"). Use page numbers 1, 2, 3... if known, or "—" for page. Include all main sections and appendices in order.
 
@@ -36,6 +40,22 @@ APPENDICES (detailed content, not one line):
 - "appendixInspectionAndTestPlan": ITP table or detailed inspection and test requirements
 - "appendixReferenceNotes": reference list, document register, revision notes
 
+SCHEDULE (array of task objects for import into scheduling tools):
+- "schedule": [
+-   {
+-     "id": 1,                         // integer task ID
+-     "wbs": "1.1",                    // WBS code like "1.1", "2.3.1"
+-     "name": "Mobilisation and site establishment",
+-     "phase": "Mobilisation",         // high-level phase label
+-     "durationDays": 5,               // whole number of working days
+-     "startOffsetDays": 0,            // offset from project start (day 0) in days
+-     "dependencies": [],              // array of predecessor IDs, e.g. [1,2]
+-     "notes": "Short explanation of assumptions and inclusions for this task."
+-   }
+- ]
+
+Ensure the schedule array is coherent and covers the full construction program from mobilisation through handover, with clear dependencies and realistic durations.
+
 JSON structure (every string value must be lengthy and detailed):
 {
   "index": "1\\tBackground\\n2\\tScope\\n...",
@@ -52,7 +72,8 @@ JSON structure (every string value must be lengthy and detailed):
   "appendixRiskMatrix": "",
   "appendixProjectProgram": "",
   "appendixInspectionAndTestPlan": "",
-  "appendixReferenceNotes": ""
+  "appendixReferenceNotes": "",
+  "schedule": []
 }`;
 
 function parseJsonFromContent(content: string): Record<string, unknown> | null {

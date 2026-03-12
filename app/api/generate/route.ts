@@ -77,7 +77,21 @@ export async function POST(req: Request) {
     }
 
     if (!prompt && !tenderText && !technicalSpecText) {
-      return errorResponse("MISSING_INPUT", "Project brief or at least one document is required", 400);
+      return errorResponse(
+        "MISSING_INPUT",
+        "Please provide a project brief and/or upload at least one tender or technical specification document.",
+        400
+      );
+    }
+
+    const promptChars = (prompt || "").trim().length;
+    const hasDocuments = !!tenderText || !!technicalSpecText;
+    if (!hasDocuments && promptChars > 0 && promptChars < 60) {
+      return errorResponse(
+        "INPUT_TOO_THIN",
+        "The project brief is too short to generate a robust plan. Please add more detail (scope, location, constraints, key risks) or upload the RFQ/tender or technical specification.",
+        400
+      );
     }
 
     const truncate = (s: string, max: number) =>

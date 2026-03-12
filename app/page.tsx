@@ -27,6 +27,7 @@ export default function Home() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [downloadingScheduleTarget, setDownloadingScheduleTarget] = useState<null | "msproject" | "primavera">(null);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [authMode, setAuthMode] = useState<"signin" | "signup" | null>(null);
   const [authEmail, setAuthEmail] = useState("");
@@ -58,17 +59,28 @@ export default function Home() {
       if (tenderFile) formData.append("tenderDocument", tenderFile);
       if (technicalSpecFile) formData.append("technicalSpecification", technicalSpecFile);
 
-    const res = await fetch("/api/generate", {
+      const res = await fetch("/api/generate", {
         method: "POST",
         body: formData,
       });
       const json = await res.json().catch(() => ({}));
-      if (!json || !json.success) {
-        throw new Error(json?.error || "Generation failed");
+
+      if (!res.ok || !json?.success) {
+        const message =
+          json?.message ||
+          json?.error ||
+          (typeof json === "string" ? json : "") ||
+          "Generation failed";
+        throw new Error(message);
       }
+
       setData(json.data ?? {});
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Generation failed");
+      const message =
+        e instanceof Error && e.message
+          ? e.message
+          : "Generation failed. Please try again.";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -90,8 +102,8 @@ export default function Home() {
     setError("");
     try {
       const res = await fetch("/api/export", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ plan: data, format: "docx" }),
       });
       const errData = await res.json().catch(() => ({}));
@@ -113,6 +125,43 @@ export default function Home() {
       setError(e instanceof Error ? e.message : "Download failed");
     } finally {
       setDownloading(false);
+    }
+  }, [data, projectName]);
+
+  const downloadScheduleCsv = useCallback(async (target: "msproject" | "primavera") => {
+    if (!data) return;
+    setDownloadingScheduleTarget(target);
+    setError("");
+    try {
+      const res = await fetch("/api/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          plan: data,
+          format: "schedule_csv",
+        }),
+      });
+      const errData = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 402) {
+          setError("Pro subscription required. Upgrade to download.");
+          return;
+        }
+        throw new Error(errData.error || "Schedule export failed");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const safeBase = (projectName || "export").replace(/[/\\?*:|"]/g, "-");
+      const suffix = target === "msproject" ? "-ms-project" : "-primavera";
+      a.download = `project-schedule-${safeBase}${suffix}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Schedule download failed");
+    } finally {
+      setDownloadingScheduleTarget(null);
     }
   }, [data, projectName]);
 
@@ -686,26 +735,68 @@ export default function Home() {
               Output
             </h2>
             {hasSections && (
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 {isPro ? (
-                  <button
-                    type="button"
-                    onClick={downloadWord}
-                    disabled={downloading}
-                    style={{
-                      padding: "8px 16px",
-                      fontSize: 13,
-                      fontWeight: 500,
-                      color: "#fff",
-                      background: "linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)",
-                      border: "none",
-                      borderRadius: 6,
-                      cursor: downloading ? "wait" : "pointer",
-                      fontFamily: "inherit",
-                    }}
-                  >
-                    {downloading ? "Preparing…" : "Download Word"}
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={downloadWord}
+                      disabled={downloading}
+                      style={{
+                        padding: "8px 16px",
+                        fontSize: 13,
+                        fontWeight: 500,
+                        color: "#fff",
+                        background: "linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)",
+                        border: "none",
+                        borderRadius: 6,
+                        cursor: downloading ? "wait" : "pointer",
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      {downloading ? "Preparing…" : "Download Word"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => downloadScheduleCsv("msproject")}
+                      disabled={downloadingScheduleTarget !== null}
+                      style={{
+                        padding: "8px 16px",
+                        fontSize: 13,
+                        fontWeight: 500,
+                        color: "#0f172a",
+                        background: "#e5f0ff",
+                        border: "1px solid #bfdbfe",
+                        borderRadius: 6,
+                        cursor: downloadingScheduleTarget !== null ? "wait" : "pointer",
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      {downloadingScheduleTarget === "msproject"
+                        ? "Preparing…"
+                        : "Open in MS Project"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => downloadScheduleCsv("primavera")}
+                      disabled={downloadingScheduleTarget !== null}
+                      style={{
+                        padding: "8px 16px",
+                        fontSize: 13,
+                        fontWeight: 500,
+                        color: "#0f172a",
+                        background: "#eefcf3",
+                        border: "1px solid #bbf7d0",
+                        borderRadius: 6,
+                        cursor: downloadingScheduleTarget !== null ? "wait" : "pointer",
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      {downloadingScheduleTarget === "primavera"
+                        ? "Preparing…"
+                        : "Open in Primavera"}
+                    </button>
+                  </>
                 ) : (
                   <button
                     type="button"
