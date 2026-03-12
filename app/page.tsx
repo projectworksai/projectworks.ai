@@ -166,14 +166,10 @@ export default function Home() {
   }, [data, projectName]);
 
   const handleCheckout = useCallback(async () => {
-    setError("");
-    try {
-      const res = await fetch("/api/stripe/checkout", { method: "POST" });
-      const json = await res.json();
-      if (json.url) window.location.href = json.url;
-      else throw new Error(json.error || "Checkout failed");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Checkout failed");
+    // For now, route users to a simple upgrade/pricing page.
+    // Stripe checkout can be wired to this later.
+    if (typeof window !== "undefined") {
+      window.location.href = "/upgrade";
     }
   }, []);
 
@@ -855,6 +851,12 @@ export default function Home() {
           </div>
 
           <div style={{ flex: 1, overflow: "auto", fontSize: 13, lineHeight: 1.55 }}>
+            {loading && (
+              <div style={{ color: "#94a3b8", fontSize: 14 }}>
+                Working on a detailed project plan for you&mdash;sit back for a moment while we map out the scope,
+                risks, and timeline.
+              </div>
+            )}
             {!hasSections && !loading && (
               <div style={{ color: "#94a3b8", fontSize: 14 }}>
                 Your plan summary will appear here after generation.
