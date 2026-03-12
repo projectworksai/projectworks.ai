@@ -41,6 +41,7 @@ export default function Home() {
   const [chatAnswer, setChatAnswer] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState("");
+  const [chatLastQuestion, setChatLastQuestion] = useState("");
 
   const isPro = (session?.user as { plan?: string } | undefined)?.plan === "PRO";
 
@@ -279,6 +280,7 @@ export default function Home() {
       }
       setChatLoading(true);
       setChatAnswer("");
+      setChatLastQuestion(q);
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 20000);
@@ -1092,9 +1094,14 @@ export default function Home() {
                   pavement rehab project?&quot;
                 </p>
               )}
+              {chatLastQuestion && (
+                <p style={{ margin: "0 0 6px 0", fontSize: 12, color: "#0f172a" }}>
+                  <strong>You:</strong> {chatLastQuestion}
+                </p>
+              )}
               {chatAnswer && (
                 <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>
-                  {chatAnswer}
+                  <strong>Assistant:</strong> {chatAnswer}
                 </p>
               )}
               {chatError && (

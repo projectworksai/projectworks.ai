@@ -5,6 +5,7 @@ const SYSTEM_PROMPT = `You are the assistant for ProjectWorks.ai (Plan Forge).
 Your role is to:
 - Answer questions about how to use the app (plans, exports, Pro vs Free, etc.).
 - Help with practical project management questions (scheduling, risk, construction methodology), but keep answers concise and pragmatic.
+- Politely handle small talk like "how are you?" with a short friendly response before steering back to project work if appropriate.
 - When something requires legal, commercial, or safety sign-off, remind the user to confirm with their organisation's processes.
 
 Keep answers clear, short, and non-technical unless the user asks for detail.`;
@@ -40,7 +41,10 @@ export async function POST(req: Request) {
       temperature: 0.4,
     });
 
-    const answer = completion.choices?.[0]?.message?.content || "";
+    const raw = completion.choices?.[0]?.message?.content;
+    const answer =
+      (typeof raw === "string" && raw.trim()) ||
+      "I’m here to help with questions about ProjectWorks.ai and project management. What would you like to know?";
     return NextResponse.json({ success: true, answer });
   } catch (error: unknown) {
     const message =
