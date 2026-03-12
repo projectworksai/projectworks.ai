@@ -42,8 +42,17 @@ export default function Home() {
   const [chatLoading, setChatLoading] = useState(false);
   const [chatError, setChatError] = useState("");
   const [chatLastQuestion, setChatLastQuestion] = useState("");
+  const [isMobile, setIsMobile] = useState(false);
 
   const isPro = (session?.user as { plan?: string } | undefined)?.plan === "PRO";
+
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 768px)");
+    const set = () => setIsMobile(mq.matches);
+    set();
+    mq.addEventListener("change", set);
+    return () => mq.removeEventListener("change", set);
+  }, []);
 
   useEffect(() => {
     if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("upgraded") === "true") {
@@ -325,18 +334,18 @@ export default function Home() {
     >
       <header
         style={{
-          padding: "20px 24px",
+          padding: isMobile ? "14px 16px" : "20px 24px",
           borderBottom: "1px solid #e2e8f0",
           background: "#fff",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
           flexWrap: "wrap",
-          gap: 16,
+          gap: 12,
         }}
       >
         <div>
-          <h1 style={{ fontSize: "1.5rem", fontWeight: 700, margin: 0, letterSpacing: "-0.02em", color: "#0f172a" }}>
+          <h1 style={{ fontSize: isMobile ? "1.25rem" : "1.5rem", fontWeight: 700, margin: 0, letterSpacing: "-0.02em", color: "#0f172a" }}>
             Plan Forge
           </h1>
           <p style={{ fontSize: "0.85rem", color: "#64748b", margin: "4px 0 0 0" }}>
@@ -382,19 +391,20 @@ export default function Home() {
         style={{
           maxWidth: 1200,
           margin: "0 auto",
-          padding: 24,
+          padding: isMobile ? "16px 16px 72px 16px" : 24,
           display: "grid",
-          gridTemplateColumns: "340px 1fr",
-          gap: 24,
+          gridTemplateColumns: isMobile ? "1fr" : "340px 1fr",
+          gap: isMobile ? 20 : 24,
           alignItems: "start",
         }}
       >
-        {/* Left column: Auth + Inputs */}
+        {/* Left column: Auth + Inputs — appears first on mobile */}
         <div
           style={{
             display: "flex",
             flexDirection: "column",
             gap: 20,
+            order: isMobile ? 1 : undefined,
           }}
         >
           {/* Auth card */}
@@ -633,7 +643,7 @@ export default function Home() {
               Brief and documents. Press Generate or Ctrl+Enter to create your plan.
             </p>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 12, marginBottom: 16 }}>
               <div>
                 <label style={{ display: "block", fontSize: 11, fontWeight: 500, color: "#64748b", marginBottom: 4 }}>Project name</label>
                 <input
@@ -798,17 +808,18 @@ export default function Home() {
           </section>
         </div>
 
-        {/* Right: Output */}
+        {/* Right: Output — full width on mobile, clearly separated */}
         <section
           style={{
             background: "#fff",
             borderRadius: 12,
-            padding: 24,
+            padding: isMobile ? 16 : 24,
             boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
             border: "1px solid #e2e8f0",
-            minHeight: 400,
+            minHeight: isMobile ? 320 : 400,
             display: "flex",
             flexDirection: "column",
+            order: isMobile ? 2 : undefined,
           }}
         >
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
@@ -1007,12 +1018,12 @@ export default function Home() {
           </div>
         </section>
       </div>
-      {/* Chat assistant */}
+      {/* Chat assistant — avoid overlapping content on mobile */}
       <div
         style={{
           position: "fixed",
-          right: 24,
-          bottom: 24,
+          right: isMobile ? 12 : 24,
+          bottom: isMobile ? 12 : 24,
           zIndex: 40,
         }}
       >
@@ -1021,25 +1032,26 @@ export default function Home() {
             type="button"
             onClick={() => setChatOpen(true)}
             style={{
-              padding: "10px 14px",
+              padding: isMobile ? "8px 12px" : "10px 14px",
               borderRadius: 999,
               border: "none",
               background: "#0f172a",
               color: "#f9fafb",
-              fontSize: 13,
+              fontSize: isMobile ? 12 : 13,
               fontWeight: 500,
               boxShadow: "0 10px 25px rgba(15,23,42,0.35)",
               cursor: "pointer",
               fontFamily: "inherit",
             }}
           >
-            Ask ProjectWorks assistant
+            {isMobile ? "Assistant" : "Ask ProjectWorks assistant"}
           </button>
         ) : (
           <section
             style={{
-              width: 320,
-              maxHeight: 420,
+              width: isMobile ? "calc(100vw - 24px)" : 320,
+              maxWidth: isMobile ? 400 : 320,
+              maxHeight: isMobile ? "70vh" : 420,
               borderRadius: 16,
               border: "1px solid #e2e8f0",
               background: "#ffffff",
