@@ -18,11 +18,16 @@ model User {
   name                   String?
   passwordHash           String?
   plan                   PlanTier  @default(FREE)
+  subscriptionTier       String    @default("free")
+  planGenerationsUsed    Int       @default(0)
+  subscriptionStart      DateTime?
+  subscriptionEnd        DateTime?
   stripeCustomerId       String?
   stripeSubscriptionId   String?
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
   savedPlans             SavedPlan[]
+  projects               Project[]
 }
 
 model SavedPlan {
@@ -33,4 +38,14 @@ model SavedPlan {
   createdAt DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Project {
+  id        String   @id @default(cuid())
+  title     String
+  content   Json
+  userId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
 }
