@@ -10,6 +10,8 @@ declare module "next-auth" {
       email: string;
       name?: string | null;
       plan: "FREE" | "PRO";
+      subscriptionTier: "free" | "pro" | "team" | "enterprise";
+      planGenerationsUsed: number;
     };
   }
 }
@@ -35,6 +37,15 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           name: user.name,
           plan: user.plan,
+          subscriptionTier: user.subscriptionTier,
+          planGenerationsUsed: user.planGenerationsUsed,
+        } as {
+          id: string;
+          email: string;
+          name: string | null;
+          plan: "FREE" | "PRO";
+          subscriptionTier: string;
+          planGenerationsUsed: number;
         };
       },
     }),
@@ -46,6 +57,10 @@ export const authOptions: NextAuthOptions = {
         token.email = user.email;
         token.name = user.name;
         token.plan = (user as { plan?: string }).plan || "FREE";
+        token.subscriptionTier =
+          (user as { subscriptionTier?: string }).subscriptionTier || "free";
+        token.planGenerationsUsed =
+          (user as { planGenerationsUsed?: number }).planGenerationsUsed ?? 0;
       }
       return token;
     },
@@ -56,9 +71,17 @@ export const authOptions: NextAuthOptions = {
         session.user.name = token.name as string | null;
         const dbUser = await prisma.user.findUnique({
           where: { id: token.id as string },
-          select: { plan: true },
+          select: {
+            plan: true,
+            subscriptionTier: true,
+            planGenerationsUsed: true,
+          },
         });
         session.user.plan = (dbUser?.plan as "FREE" | "PRO") || "FREE";
+        session.user.subscriptionTier =
+          (dbUser?.subscriptionTier as "free" | "pro" | "team" | "enterprise") ||
+          "free";
+        session.user.planGenerationsUsed = dbUser?.planGenerationsUsed ?? 0;
       }
       return session;
     },
