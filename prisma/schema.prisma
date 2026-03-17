@@ -41,11 +41,20 @@ model SavedPlan {
 }
 
 model Project {
-  id        String   @id @default(cuid())
-  title     String
-  content   Json
-  userId    String
-  createdAt DateTime @default(now())
+  id         String   @id @default(cuid())
+  title      String
+  content    Json?    // legacy full plan; used when not using progressive sections
+  userId     String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  overview    Json?
+  scope       Json?
+  schedule    Json?
+  resources   Json?
+  procurement Json?
+  risk        Json?
+  compliance  Json?
 
   user User @relation(fields: [userId], references: [id])
 }

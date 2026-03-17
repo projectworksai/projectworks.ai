@@ -43,6 +43,14 @@ export default function Home() {
   const [chatError, setChatError] = useState("");
   const [chatLastQuestion, setChatLastQuestion] = useState("");
   const [isMobile, setIsMobile] = useState(false);
+  const [generationMode, setGenerationMode] = useState<"preview" | "full" | null>(null);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+
+  type ProgressiveStep = "pending" | "loading" | "done" | "error";
+  const PROGRESSIVE_SECTIONS = ["overview", "scope", "schedule", "resources", "procurement", "risk", "compliance"] as const;
+  const [progressiveState, setProgressiveState] = useState<Record<string, ProgressiveStep>>({});
+  const [progressiveData, setProgressiveData] = useState<Record<string, Record<string, unknown>>>({});
+  const [useProgressive, setUseProgressive] = useState(true);
 
   const isPro = (session?.user as { plan?: string } | undefined)?.plan === "PRO";
 
@@ -61,7 +69,60 @@ export default function Home() {
     }
   }, [update]);
 
+  const buildProjectPrompt = useCallback(() => {
+    const parts = [
+      projectName ? `Project name: ${projectName}` : "",
+      client ? `Client: ${client}` : "",
+      location ? `Location: ${location}` : "",
+      prompt ? `Project brief:\n${prompt}` : "",
+    ].filter(Boolean);
+    return parts.join("\n\n");
+  }, [projectName, client, location, prompt]);
+
+  const generateProgressive = useCallback(async () => {
+    const projectPrompt = buildProjectPrompt();
+    if (!projectPrompt.trim()) {
+      setError("Please enter a project brief or details.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    setData(null);
+    setProgressiveData({});
+    const initial: Record<string, ProgressiveStep> = {};
+    PROGRESSIVE_SECTIONS.forEach((s) => (initial[s] = "pending"));
+    setProgressiveState(initial);
+
+    for (const section of PROGRESSIVE_SECTIONS) {
+      setProgressiveState((prev) => ({ ...prev, [section]: "loading" }));
+      try {
+        const res = await fetch(`/api/generate/${section}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ projectPrompt }),
+        });
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || !json?.success) {
+          setProgressiveState((prev) => ({ ...prev, [section]: "error" }));
+          setError(json?.message || json?.error || `Failed to generate ${section}`);
+          break;
+        }
+        setProgressiveState((prev) => ({ ...prev, [section]: "done" }));
+        setProgressiveData((prev) => ({ ...prev, [section]: (json.data ?? {}) as Record<string, unknown> }));
+      } catch (e) {
+        setProgressiveState((prev) => ({ ...prev, [section]: "error" }));
+        setError(e instanceof Error ? e.message : `Failed to generate ${section}`);
+        break;
+      }
+    }
+    setLoading(false);
+  }, [buildProjectPrompt]);
+
   const generate = useCallback(async () => {
+    if (useProgressive) {
+      await generateProgressive();
+      return;
+    }
     setLoading(true);
     setError("");
     setData(null);
@@ -73,6 +134,7 @@ export default function Home() {
       if (location) formData.append("location", location);
       if (tenderFile) formData.append("tenderDocument", tenderFile);
       if (technicalSpecFile) formData.append("technicalSpecification", technicalSpecFile);
+      formData.append("mode", status === "authenticated" ? "full" : "preview");
 
       const res = await fetch("/api/generate", {
         method: "POST",
@@ -81,25 +143,18 @@ export default function Home() {
       const json = await res.json().catch(() => ({}));
 
       if (!res.ok || !json?.success) {
-        const message =
-          json?.message ||
-          json?.error ||
-          (typeof json === "string" ? json : "") ||
-          "Generation failed";
+        if (json?.code === "UPGRADE_REQUIRED" || res.status === 402) setShowUpgradeModal(true);
+        const message = json?.message || json?.error || (typeof json === "string" ? json : "") || "Generation failed";
         throw new Error(message);
       }
-
+      setGenerationMode((json.mode as "preview" | "full") || null);
       setData(json.data ?? {});
     } catch (e) {
-      const message =
-        e instanceof Error && e.message
-          ? e.message
-          : "Generation failed. Please try again.";
-      setError(message);
+      setError(e instanceof Error && e.message ? e.message : "Generation failed. Please try again.");
     } finally {
       setLoading(false);
     }
-  }, [prompt, projectName, client, location, tenderFile, technicalSpecFile]);
+  }, [prompt, projectName, client, location, tenderFile, technicalSpecFile, status, useProgressive, generateProgressive]);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -277,6 +332,16 @@ export default function Home() {
 
   const mainSections = data ? getMainSectionsOnly(data) : {};
   const hasSections = Object.keys(mainSections).length > 0;
+  const hasProgressive = PROGRESSIVE_SECTIONS.some((s) => progressiveState[s] === "done" || progressiveState[s] === "loading");
+  const sectionLabels: Record<string, string> = {
+    overview: "Overview",
+    scope: "Scope",
+    schedule: "Schedule",
+    resources: "Resources",
+    procurement: "Procurement",
+    risk: "Risk",
+    compliance: "Compliance",
+  };
 
   const handleChatSubmit = useCallback(
     async (e: React.FormEvent) => {
@@ -913,18 +978,110 @@ export default function Home() {
           </div>
 
           <div style={{ flex: 1, overflow: "auto", fontSize: 13, lineHeight: 1.55 }}>
-            {loading && (
+            {loading && !hasProgressive && (
               <div style={{ color: "#94a3b8", fontSize: 14 }}>
                 Working on a detailed project plan for you&mdash;sit back for a moment while we map out the scope,
                 risks, and timeline.
               </div>
             )}
-            {!hasSections && !loading && (
+            {hasProgressive && (
+              <>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+                  {PROGRESSIVE_SECTIONS.map((key) => {
+                    const st = progressiveState[key];
+                    const label = sectionLabels[key];
+                    return (
+                      <span
+                        key={key}
+                        style={{
+                          fontSize: 12,
+                          padding: "4px 10px",
+                          borderRadius: 999,
+                          background: st === "done" ? "#dcfce7" : st === "loading" ? "#fef3c7" : st === "error" ? "#fee2e2" : "#f1f5f9",
+                          color: st === "done" ? "#166534" : st === "loading" ? "#92400e" : st === "error" ? "#b91c1c" : "#64748b",
+                        }}
+                      >
+                        {st === "done" ? "✔ " : st === "loading" ? "⏳ " : st === "error" ? "✗ " : "○ "}
+                        {label}
+                      </span>
+                    );
+                  })}
+                </div>
+                {PROGRESSIVE_SECTIONS.filter((s) => progressiveState[s] === "done").map((key) => {
+                  const d = progressiveData[key];
+                  if (!d || typeof d !== "object") return null;
+                  const label = sectionLabels[key];
+                  let content: React.ReactNode;
+                  if (key === "overview") {
+                    const summary = d.summary != null ? String(d.summary) : "";
+                    const objectives = Array.isArray(d.objectives) ? d.objectives : [];
+                    const budget = d.budgetEstimate != null ? String(d.budgetEstimate) : "";
+                    const duration = d.durationWeeks != null ? String(d.durationWeeks) : "";
+                    content = (
+                      <>
+                        {summary && <p style={{ margin: "0 0 8px 0" }}>{summary}</p>}
+                        {objectives.length > 0 && (
+                          <>
+                            <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Objectives</p>
+                            <ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{objectives.map((o: unknown, i: number) => <li key={i}>{String(o)}</li>)}</ul>
+                          </>
+                        )}
+                        {(budget || duration) && (
+                          <p style={{ margin: 0, fontSize: 12, color: "#64748b" }}>
+                            {budget && <span>Budget: {budget}</span>}
+                            {budget && duration && " · "}
+                            {duration && <span>Duration: {duration} weeks</span>}
+                          </p>
+                        )}
+                      </>
+                    );
+                  } else if (key === "risk" && Array.isArray(d.risks)) {
+                    content = (
+                      <>
+                        {(d.overallRiskSummary as string) && <p style={{ margin: "0 0 8px 0" }}>{String(d.overallRiskSummary)}</p>}
+                        <ul style={{ margin: 0, paddingLeft: 18 }}>
+                          {d.risks.slice(0, 10).map((r: Record<string, unknown>, i: number) => (
+                            <li key={i} style={{ marginBottom: 4 }}>
+                              {r.description as string} — {r.likelihood as string}/{r.impact as string}. Mitigation: {r.mitigation as string}
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    );
+                  } else {
+                    content = <div style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(d, null, 2)}</div>;
+                  }
+                  return (
+                    <div key={key} style={{ marginBottom: 16, padding: 12, background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0" }}>
+                      <h3 style={{ margin: "0 0 8px 0", fontSize: 14, fontWeight: 600 }}>{label}</h3>
+                      <div style={{ fontSize: 12, color: "#334155" }}>{content}</div>
+                    </div>
+                  );
+                })}
+              </>
+            )}
+            {!hasSections && !hasProgressive && !loading && (
               <div style={{ color: "#94a3b8", fontSize: 14 }}>
                 Your plan summary will appear here after generation.
               </div>
             )}
-            {hasSections &&
+            {hasSections && !hasProgressive && generationMode === "preview" && (
+              <div
+                style={{
+                  padding: 12,
+                  marginBottom: 12,
+                  borderRadius: 8,
+                  background: "#eff6ff",
+                  border: "1px solid #bfdbfe",
+                  fontSize: 12,
+                  color: "#1d4ed8",
+                }}
+              >
+                This is a preview of your project plan. Create a free account to unlock the full execution plan,
+                including detailed tasks, dependencies, procurement, and compliance checklists.
+              </div>
+            )}
+            {hasSections && !hasProgressive &&
               Object.entries(mainSections).map(([title, text]) => {
                 const isIndex = title === "Index";
                 const indexContent = isIndex ? getIndexContentForTable(text) : "";
@@ -935,6 +1092,15 @@ export default function Home() {
                 const isExpanded = expandedSections[title] ?? isIndex;
                 const toggle = () => setExpandedSections((prev) => ({ ...prev, [title]: !prev[title] }));
                 const summary = isIndex ? (indexRows.length ? "Table of contents" : "—") : toSummary(text);
+                const isLockedSection =
+                  generationMode === "preview" &&
+                  !isIndex &&
+                  title !== "Background" &&
+                  title !== "Scope";
+
+                if (generationMode === "preview" && isLockedSection) {
+                  return null;
+                }
                 return (
                   <div key={title} style={{ marginBottom: 12, borderBottom: "1px solid #f1f5f9", paddingBottom: 12 }}>
                     <button
@@ -997,7 +1163,7 @@ export default function Home() {
                   </div>
                 );
               })}
-            {hasSections && !isPro && (
+            {hasSections && !hasProgressive && !isPro && (
               <div
                 style={{
                   marginTop: 16,
@@ -1018,6 +1184,94 @@ export default function Home() {
           </div>
         </section>
       </div>
+      {showUpgradeModal && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(15,23,42,0.55)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 50,
+          }}
+        >
+          <section
+            style={{
+              width: "100%",
+              maxWidth: 420,
+              background: "#ffffff",
+              borderRadius: 16,
+              padding: 24,
+              boxShadow: "0 20px 45px rgba(15,23,42,0.35)",
+              border: "1px solid #e2e8f0",
+            }}
+          >
+            <h2 style={{ margin: 0, marginBottom: 8, fontSize: 18, fontWeight: 600, color: "#0f172a" }}>
+              Unlock unlimited execution plans
+            </h2>
+            <p style={{ margin: "0 0 16px 0", fontSize: 13, color: "#475569" }}>
+              You&apos;ve used your free full project generation. Upgrade to continue generating detailed execution
+              plans, export Word/PDF, and download schedules for MS Project and Primavera.
+            </p>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.href = "/pricing#pro";
+                }}
+                style={{
+                  padding: "10px 14px",
+                  borderRadius: 999,
+                  border: "none",
+                  background: "linear-gradient(135deg, #0f172a 0%, #1d4ed8 100%)",
+                  color: "#f9fafb",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                Upgrade to Pro ($29/month)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  window.location.href = "/pricing#team";
+                }}
+                style={{
+                  padding: "9px 14px",
+                  borderRadius: 999,
+                  border: "1px solid #e2e8f0",
+                  background: "#f8fafc",
+                  color: "#0f172a",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                Upgrade to Team ($99/month)
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowUpgradeModal(false)}
+              style={{
+                marginTop: 4,
+                border: "none",
+                background: "none",
+                color: "#64748b",
+                fontSize: 12,
+                cursor: "pointer",
+                textDecoration: "underline",
+              }}
+            >
+              Maybe later
+            </button>
+          </section>
+        </div>
+      )}
       {/* Chat assistant — avoid overlapping content on mobile */}
       <div
         style={{
