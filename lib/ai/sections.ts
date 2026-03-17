@@ -42,9 +42,10 @@ Be specific to the project.`,
   "phases": [{"name": "Phase name", "durationWeeks": number, "description": "short description"}, ...],
   "milestones": [{"name": "Milestone", "targetWeek": number, "deliverable": "what is delivered"}, ...],
   "criticalPathNotes": "Brief narrative on critical path and dependencies",
-  "keyDates": [{"label": "date label", "week": number}, ...] or []
+  "keyDates": [{"label": "date label", "week": number}, ...] or [],
+  "tasks": [{"id": "1", "name": "Task name", "phase": "Phase name", "wbs": "1.1", "durationDays": number, "startOffsetDays": number, "dependencies": ["id of predecessor"]}, ...]
 }
-Include at least 3-5 phases and 3-5 milestones. Use numbers for durations and weeks.`,
+Include at least 3-5 phases and 3-5 milestones. tasks must be a flat list for MS Project/Primavera: id (string), name, phase, wbs, durationDays, startOffsetDays (days from project start), dependencies (array of predecessor task ids). Use numbers for durations and weeks.`,
 
   resources: `You are a project management expert. Given a project brief, return ONLY valid JSON (no markdown) with this structure:
 {
@@ -83,6 +84,49 @@ Include 5-10 risks. Use only Low, Medium, High for likelihood and impact.`,
   "regulatoryRequirements": ["requirement 1", ...] or []
 }
 Reference relevant Australian/industry standards where applicable.`,
+
+  qualityManagement: `You are a project management expert for construction. Given a project brief, return ONLY valid JSON (no markdown) with this structure:
+{
+  "summary": "Brief overview of quality approach (1-2 paragraphs)",
+  "objectives": ["quality objective 1", ...],
+  "standards": ["e.g. AS/ISO or client standard", ...],
+  "inspectionAndTest": ["ITP item or inspection activity", ...],
+  "defectsManagement": "How defects and NCRs are managed",
+  "qualityRecords": ["type of record to be maintained", ...]
+}
+Focus on construction project quality management.`,
+
+  plantAndEquipment: `You are a project management expert for construction. Given a project brief, return ONLY valid JSON (no markdown) with this structure:
+{
+  "summary": "Brief overview of plant and equipment strategy (1-2 paragraphs)",
+  "equipment": [{"item": "Plant/equipment name", "quantity": number or "as required", "use": "brief use or phase", "notes": "optional"}],
+  "majorPlant": ["key plant items with brief spec", ...],
+  "maintenanceAndAvailability": "How maintenance and availability are ensured",
+  "assumptions": ["assumption 1", ...]
+}
+Be specific to construction plant and equipment.`,
+
+  constructionMethodology: `You are a project management expert for construction. Given a project brief, return ONLY valid JSON (no markdown) with this structure:
+{
+  "summary": "Executive summary of construction methodology (2-3 paragraphs)",
+  "sequence": ["Step 1: description", "Step 2: description", ...],
+  "keyMethods": [{"activity": "Activity name", "method": "How it will be done", "notes": "optional"}],
+  "temporaryWorks": ["temporary works or staging requirement", ...],
+  "interfaces": "Description of interfaces with existing assets, utilities, or other contractors",
+  "constraints": ["constraint 1", ...]
+}
+Describe construction method statement / methodology.`,
+
+  safetyManagement: `You are a project management expert for construction. Given a project brief, return ONLY valid JSON (no markdown) with this structure:
+{
+  "summary": "Brief overview of safety management approach (1-2 paragraphs)",
+  "objectives": ["safety objective 1", ...],
+  "hazards": [{"hazard": "description", "control": "control measure"}, ...],
+  "swms": ["SWMS or high-risk activity", ...],
+  "trainingAndInduction": "Training and induction requirements",
+  "emergencyProcedures": "Brief emergency and incident response"
+}
+Focus on construction WHS/safety.`,
 };
 
 function parseJsonFromContent(content: string): Record<string, unknown> | null {

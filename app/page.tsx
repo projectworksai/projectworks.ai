@@ -47,9 +47,13 @@ export default function Home() {
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   type ProgressiveStep = "pending" | "loading" | "done" | "error";
-  const PROGRESSIVE_SECTIONS = ["overview", "scope", "schedule", "resources", "procurement", "risk", "compliance"] as const;
+  const PROGRESSIVE_SECTIONS = [
+    "overview", "scope", "schedule", "resources", "plant-and-equipment", "construction-methodology",
+    "procurement", "quality-management", "risk", "safety-management", "compliance",
+  ] as const;
   const [progressiveState, setProgressiveState] = useState<Record<string, ProgressiveStep>>({});
   const [progressiveData, setProgressiveData] = useState<Record<string, Record<string, unknown>>>({});
+  const [expandedProgressiveSections, setExpandedProgressiveSections] = useState<Record<string, boolean>>({});
   const [useProgressive, setUseProgressive] = useState(true);
 
   const isPro = (session?.user as { plan?: string } | undefined)?.plan === "PRO";
@@ -198,8 +202,18 @@ export default function Home() {
     }
   }, [data, projectName]);
 
+  const schedulePlanForExport = data ?? (progressiveData.schedule && Array.isArray(progressiveData.schedule.tasks) && (progressiveData.schedule.tasks as unknown[]).length > 0
+    ? { schedule: progressiveData.schedule.tasks }
+    : null);
+
   const downloadScheduleCsv = useCallback(async (target: "msproject" | "primavera") => {
-    if (!data) return;
+    const planToUse = data ?? (progressiveData.schedule && Array.isArray(progressiveData.schedule.tasks) && (progressiveData.schedule.tasks as unknown[]).length > 0
+      ? { schedule: progressiveData.schedule.tasks }
+      : null);
+    if (!planToUse) {
+      setError("Generate a plan with Schedule first to download for MS Project or Primavera.");
+      return;
+    }
     setDownloadingScheduleTarget(target);
     setError("");
     try {
@@ -207,7 +221,7 @@ export default function Home() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          plan: data,
+          plan: planToUse,
           format: "schedule_csv",
         }),
       });
@@ -233,7 +247,7 @@ export default function Home() {
     } finally {
       setDownloadingScheduleTarget(null);
     }
-  }, [data, projectName]);
+  }, [data, progressiveData, projectName]);
 
   const handleCheckout = useCallback(async () => {
     // For now, route users to a simple upgrade/pricing page.
@@ -338,8 +352,12 @@ export default function Home() {
     scope: "Scope",
     schedule: "Schedule",
     resources: "Resources",
+    "plant-and-equipment": "Plant and Equipment",
+    "construction-methodology": "Construction Methodology",
     procurement: "Procurement",
-    risk: "Risk",
+    "quality-management": "Quality Management",
+    risk: "Risk Management",
+    "safety-management": "Safety Management",
     compliance: "Compliance",
   };
 
@@ -1011,6 +1029,15 @@ export default function Home() {
                   const d = progressiveData[key];
                   if (!d || typeof d !== "object") return null;
                   const label = sectionLabels[key];
+                  const getBrief = (obj: Record<string, unknown>, maxChars = 280): string => {
+                    const s = (obj.summary ?? obj.criticalPathNotes ?? obj.scopeOfWork ?? obj.organisationSummary ?? obj.procurementNotes ?? obj.overallRiskSummary ?? obj.complianceNotes ?? "").toString().trim();
+                    if (!s) return "—";
+                    const first = s.split(/\n\s*\n/)[0]?.trim() || s;
+                    return first.length <= maxChars ? first : first.slice(0, maxChars).trim() + "…";
+                  };
+                  const brief = getBrief(d);
+                  const isExpanded = expandedProgressiveSections[key] ?? true;
+                  const toggleProgressive = () => setExpandedProgressiveSections((prev) => ({ ...prev, [key]: !prev[key] }));
                   let content: React.ReactNode;
                   if (key === "overview") {
                     const summary = d.summary != null ? String(d.summary) : "";
@@ -1048,13 +1075,278 @@ export default function Home() {
                         </ul>
                       </>
                     );
+                  } else if (key === "scope") {
+                    const scopeOfWork = d.scopeOfWork != null ? String(d.scopeOfWork) : "";
+                    const inclusions = Array.isArray(d.inclusions) ? d.inclusions : [];
+                    const exclusions = Array.isArray(d.exclusions) ? d.exclusions : [];
+                    const boundaries = d.boundaries != null ? String(d.boundaries) : "";
+                    const acceptanceCriteria = Array.isArray(d.acceptanceCriteria) ? d.acceptanceCriteria : [];
+                    content = (
+                      <>
+                        {scopeOfWork && <p style={{ margin: "0 0 8px 0" }}>{scopeOfWork}</p>}
+                        {inclusions.length > 0 && (
+                          <>
+                            <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Inclusions</p>
+                            <ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{inclusions.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul>
+                          </>
+                        )}
+                        {exclusions.length > 0 && (
+                          <>
+                            <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Exclusions</p>
+                            <ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{exclusions.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul>
+                          </>
+                        )}
+                        {boundaries && (
+                          <>
+                            <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Boundaries</p>
+                            <p style={{ margin: "0 0 8px 0" }}>{boundaries}</p>
+                          </>
+                        )}
+                        {acceptanceCriteria.length > 0 && (
+                          <>
+                            <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Acceptance criteria</p>
+                            <ul style={{ margin: 0, paddingLeft: 18 }}>{acceptanceCriteria.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul>
+                          </>
+                        )}
+                      </>
+                    );
+                  } else if (key === "schedule") {
+                    const phases = Array.isArray(d.phases) ? d.phases : [];
+                    const milestones = Array.isArray(d.milestones) ? d.milestones : [];
+                    const criticalPathNotes = d.criticalPathNotes != null ? String(d.criticalPathNotes) : "";
+                    content = (
+                      <>
+                        {criticalPathNotes && <p style={{ margin: "0 0 8px 0" }}>{criticalPathNotes}</p>}
+                        {phases.length > 0 && (
+                          <>
+                            <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Phases</p>
+                            <ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>
+                              {phases.map((p: Record<string, unknown>, i: number) => (
+                                <li key={i}>{String(p.name)} — {p.durationWeeks != null ? `${p.durationWeeks} weeks` : ""} {p.description ? `· ${String(p.description)}` : ""}</li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
+                        {milestones.length > 0 && (
+                          <>
+                            <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Milestones</p>
+                            <ul style={{ margin: 0, paddingLeft: 18 }}>
+                              {milestones.map((m: Record<string, unknown>, i: number) => (
+                                <li key={i}>{String(m.name)} (week {String(m.targetWeek ?? "—")}) — {String(m.deliverable ?? "")}</li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
+                      </>
+                    );
+                  } else if (key === "resources") {
+                    const roles = Array.isArray(d.roles) ? d.roles : [];
+                    const equipment = Array.isArray(d.equipment) ? d.equipment : [];
+                    const assumptions = Array.isArray(d.assumptions) ? d.assumptions : [];
+                    const orgSummary = d.organisationSummary != null ? String(d.organisationSummary) : "";
+                    content = (
+                      <>
+                        {orgSummary && <p style={{ margin: "0 0 8px 0" }}>{orgSummary}</p>}
+                        {roles.length > 0 && (
+                          <>
+                            <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Roles</p>
+                            <ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>
+                              {roles.map((r: Record<string, unknown>, i: number) => (
+                                <li key={i}>{String(r.role)} {r.count != null && r.count !== 1 ? `(${r.count})` : ""} — {String(r.responsibilities ?? "")}</li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
+                        {equipment.length > 0 && (
+                          <>
+                            <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Equipment</p>
+                            <ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>
+                              {equipment.map((e: Record<string, unknown>, i: number) => (
+                                <li key={i}>{String(e.item)} {e.quantity != null ? `· ${String(e.quantity)}` : ""} {e.notes ? `— ${String(e.notes)}` : ""}</li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
+                        {assumptions.length > 0 && (
+                          <>
+                            <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Assumptions</p>
+                            <ul style={{ margin: 0, paddingLeft: 18 }}>{assumptions.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul>
+                          </>
+                        )}
+                      </>
+                    );
+                  } else if (key === "procurement") {
+                    const items = Array.isArray(d.items) ? d.items : [];
+                    const assumptions = Array.isArray(d.assumptions) ? d.assumptions : [];
+                    const keySuppliers = Array.isArray(d.keySuppliers) ? d.keySuppliers : [];
+                    const notes = d.procurementNotes != null ? String(d.procurementNotes) : "";
+                    content = (
+                      <>
+                        {notes && <p style={{ margin: "0 0 8px 0" }}>{notes}</p>}
+                        {items.length > 0 && (
+                          <>
+                            <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Items</p>
+                            <ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>
+                              {items.map((it: Record<string, unknown>, i: number) => (
+                                <li key={i}>{String(it.category ?? it.description)} — {String(it.description ?? "")} {it.estimatedValue ? `(${String(it.estimatedValue)})` : ""} {it.leadTimeWeeks != null ? `· ${it.leadTimeWeeks}w lead` : ""}</li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
+                        {keySuppliers.length > 0 && (
+                          <>
+                            <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Key suppliers</p>
+                            <ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{keySuppliers.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul>
+                          </>
+                        )}
+                        {assumptions.length > 0 && (
+                          <>
+                            <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Assumptions</p>
+                            <ul style={{ margin: 0, paddingLeft: 18 }}>{assumptions.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul>
+                          </>
+                        )}
+                      </>
+                    );
+                  } else if (key === "compliance") {
+                    const standards = Array.isArray(d.standards) ? d.standards : [];
+                    const checklists = Array.isArray(d.checklists) ? d.checklists : [];
+                    const notes = d.complianceNotes != null ? String(d.complianceNotes) : "";
+                    const regulatory = Array.isArray(d.regulatoryRequirements) ? d.regulatoryRequirements : [];
+                    content = (
+                      <>
+                        {notes && <p style={{ margin: "0 0 8px 0" }}>{notes}</p>}
+                        {standards.length > 0 && (
+                          <>
+                            <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Standards</p>
+                            <ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>
+                              {standards.map((s: Record<string, unknown>, i: number) => (
+                                <li key={i}>{String(s.code ?? "")} — {String(s.description ?? "")}</li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
+                        {regulatory.length > 0 && (
+                          <>
+                            <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Regulatory requirements</p>
+                            <ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{regulatory.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul>
+                          </>
+                        )}
+                        {checklists.length > 0 && (
+                          <>
+                            <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Checklists</p>
+                            <ul style={{ margin: 0, paddingLeft: 18 }}>
+                              {checklists.map((c: Record<string, unknown>, i: number) => (
+                                <li key={i}>
+                                  {String(c.name ?? "")}
+                                  {Array.isArray(c.items) && c.items.length > 0 && (
+                                    <ul style={{ margin: "4px 0 0 0", paddingLeft: 18 }}>{c.items.map((it: unknown, j: number) => <li key={j}>{String(it)}</li>)}</ul>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
+                      </>
+                    );
+                  } else if (key === "quality-management") {
+                    const summary = d.summary != null ? String(d.summary) : "";
+                    const objectives = Array.isArray(d.objectives) ? d.objectives : [];
+                    const standards = Array.isArray(d.standards) ? d.standards : [];
+                    const inspectionAndTest = Array.isArray(d.inspectionAndTest) ? d.inspectionAndTest : [];
+                    const defectsManagement = d.defectsManagement != null ? String(d.defectsManagement) : "";
+                    const qualityRecords = Array.isArray(d.qualityRecords) ? d.qualityRecords : [];
+                    content = (
+                      <>
+                        {summary && <p style={{ margin: "0 0 8px 0" }}>{summary}</p>}
+                        {objectives.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Objectives</p><ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{objectives.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul></>)}
+                        {standards.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Standards</p><ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{standards.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul></>)}
+                        {inspectionAndTest.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Inspection &amp; test</p><ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{inspectionAndTest.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul></>)}
+                        {defectsManagement && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Defects management</p><p style={{ margin: "0 0 8px 0" }}>{defectsManagement}</p></>)}
+                        {qualityRecords.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Quality records</p><ul style={{ margin: 0, paddingLeft: 18 }}>{qualityRecords.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul></>)}
+                      </>
+                    );
+                  } else if (key === "plant-and-equipment") {
+                    const summary = d.summary != null ? String(d.summary) : "";
+                    const equipment = Array.isArray(d.equipment) ? d.equipment : [];
+                    const majorPlant = Array.isArray(d.majorPlant) ? d.majorPlant : [];
+                    const maintenance = d.maintenanceAndAvailability != null ? String(d.maintenanceAndAvailability) : "";
+                    const assumptions = Array.isArray(d.assumptions) ? d.assumptions : [];
+                    content = (
+                      <>
+                        {summary && <p style={{ margin: "0 0 8px 0" }}>{summary}</p>}
+                        {equipment.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Equipment</p><ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{equipment.map((e: Record<string, unknown>, i: number) => <li key={i}>{String(e.item)} {e.quantity != null ? `· ${String(e.quantity)}` : ""} {e.use ? `— ${String(e.use)}` : ""}</li>)}</ul></>)}
+                        {majorPlant.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Major plant</p><ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{majorPlant.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul></>)}
+                        {maintenance && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Maintenance &amp; availability</p><p style={{ margin: "0 0 8px 0" }}>{maintenance}</p></>)}
+                        {assumptions.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Assumptions</p><ul style={{ margin: 0, paddingLeft: 18 }}>{assumptions.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul></>)}
+                      </>
+                    );
+                  } else if (key === "construction-methodology") {
+                    const summary = d.summary != null ? String(d.summary) : "";
+                    const sequence = Array.isArray(d.sequence) ? d.sequence : [];
+                    const keyMethods = Array.isArray(d.keyMethods) ? d.keyMethods : [];
+                    const temporaryWorks = Array.isArray(d.temporaryWorks) ? d.temporaryWorks : [];
+                    const interfaces = d.interfaces != null ? String(d.interfaces) : "";
+                    const constraints = Array.isArray(d.constraints) ? d.constraints : [];
+                    content = (
+                      <>
+                        {summary && <p style={{ margin: "0 0 8px 0" }}>{summary}</p>}
+                        {sequence.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Sequence</p><ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{sequence.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul></>)}
+                        {keyMethods.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Key methods</p><ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{keyMethods.map((m: Record<string, unknown>, i: number) => <li key={i}>{String(m.activity)} — {String(m.method ?? "")}</li>)}</ul></>)}
+                        {temporaryWorks.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Temporary works</p><ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{temporaryWorks.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul></>)}
+                        {interfaces && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Interfaces</p><p style={{ margin: "0 0 8px 0" }}>{interfaces}</p></>)}
+                        {constraints.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Constraints</p><ul style={{ margin: 0, paddingLeft: 18 }}>{constraints.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul></>)}
+                      </>
+                    );
+                  } else if (key === "safety-management") {
+                    const summary = d.summary != null ? String(d.summary) : "";
+                    const objectives = Array.isArray(d.objectives) ? d.objectives : [];
+                    const hazards = Array.isArray(d.hazards) ? d.hazards : [];
+                    const swms = Array.isArray(d.swms) ? d.swms : [];
+                    const training = d.trainingAndInduction != null ? String(d.trainingAndInduction) : "";
+                    const emergency = d.emergencyProcedures != null ? String(d.emergencyProcedures) : "";
+                    content = (
+                      <>
+                        {summary && <p style={{ margin: "0 0 8px 0" }}>{summary}</p>}
+                        {objectives.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Objectives</p><ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{objectives.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul></>)}
+                        {hazards.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Hazards &amp; controls</p><ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{hazards.map((h: Record<string, unknown>, i: number) => <li key={i}>{String(h.hazard)} — {String(h.control ?? "")}</li>)}</ul></>)}
+                        {swms.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>SWMS / high-risk</p><ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{swms.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul></>)}
+                        {training && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Training &amp; induction</p><p style={{ margin: "0 0 8px 0" }}>{training}</p></>)}
+                        {emergency && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Emergency procedures</p><p style={{ margin: 0 }}>{emergency}</p></>)}
+                      </>
+                    );
                   } else {
                     content = <div style={{ whiteSpace: "pre-wrap" }}>{JSON.stringify(d, null, 2)}</div>;
                   }
                   return (
-                    <div key={key} style={{ marginBottom: 16, padding: 12, background: "#f8fafc", borderRadius: 8, border: "1px solid #e2e8f0" }}>
-                      <h3 style={{ margin: "0 0 8px 0", fontSize: 14, fontWeight: 600 }}>{label}</h3>
-                      <div style={{ fontSize: 12, color: "#334155" }}>{content}</div>
+                    <div key={key} style={{ marginBottom: 12, borderBottom: "1px solid #e2e8f0", paddingBottom: 12 }}>
+                      <button
+                        type="button"
+                        onClick={toggleProgressive}
+                        style={{
+                          width: "100%",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 8,
+                          padding: "8px 0",
+                          border: "none",
+                          background: "none",
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: "#0f172a",
+                          textAlign: "left",
+                        }}
+                      >
+                        <span>{label}</span>
+                        <span style={{ fontSize: 18, color: "#64748b" }}>{isExpanded ? "−" : "+"}</span>
+                      </button>
+                      {isExpanded ? (
+                        <div style={{ fontSize: 12, color: "#334155", paddingTop: 4 }}>{content}</div>
+                      ) : (
+                        <div style={{ fontSize: 12, color: "#64748b", lineHeight: 1.4 }}>{brief}</div>
+                      )}
                     </div>
                   );
                 })}
