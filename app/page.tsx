@@ -909,7 +909,54 @@ export default function Home() {
             <h2 style={{ fontSize: "1rem", fontWeight: 600, color: "#0f172a", margin: 0 }}>
               Output
             </h2>
-            {hasSections && (
+            {!isPro && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-start", flex: "1 1 auto", minWidth: 0 }}>
+                <p style={{ margin: 0, fontSize: 12, color: "#475569", lineHeight: 1.4 }}>
+                  {status !== "authenticated"
+                    ? "Sign in or subscribe to download Word/PDF. Schedule (MS Project / Primavera) requires a subscription."
+                    : "Subscribe to download Word/PDF and schedule for MS Project or Primavera."}
+                </p>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  {status !== "authenticated" && (
+                    <button
+                      type="button"
+                      onClick={() => setAuthMode("signin")}
+                      style={{
+                        padding: "6px 12px",
+                        fontSize: 12,
+                        fontWeight: 500,
+                        color: "#fff",
+                        background: "#0f172a",
+                        border: "none",
+                        borderRadius: 6,
+                        cursor: "pointer",
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      Sign in
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleCheckout}
+                    style={{
+                      padding: "6px 12px",
+                      fontSize: 12,
+                      fontWeight: 500,
+                      color: "#0ea5e9",
+                      background: "#f0f9ff",
+                      border: "1px solid #bae6fd",
+                      borderRadius: 6,
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    {status === "authenticated" ? "Subscribe to download" : "View pricing"}
+                  </button>
+                </div>
+              </div>
+            )}
+            {hasSections && isPro && (
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 {isPro ? (
                   <>
