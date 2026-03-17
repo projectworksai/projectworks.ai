@@ -973,23 +973,54 @@ export default function Home() {
                     </button>
                   </>
                 ) : (
-                  <button
-                    type="button"
-                    onClick={handleCheckout}
-                    style={{
-                      padding: "8px 16px",
-                      fontSize: 13,
-                      fontWeight: 500,
-                      color: "#0ea5e9",
-                      background: "#f0f9ff",
-                      border: "1px solid #bae6fd",
-                      borderRadius: 6,
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                    }}
-                  >
-                    Upgrade to Pro to download
-                  </button>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start" }}>
+                    <p style={{ margin: 0, fontSize: 12, color: "#475569", lineHeight: 1.4 }}>
+                      {status !== "authenticated"
+                        ? "Sign in or subscribe to download Word/PDF. Schedule (MS Project / Primavera) requires a subscription."
+                        : "Subscribe to download Word/PDF and schedule for MS Project or Primavera."}
+                    </p>
+                    <p style={{ margin: 0, fontSize: 11, color: "#94a3b8", lineHeight: 1.3 }}>
+                      Free: preview plans · Sign in: 1 full plan · Subscribe: Word/PDF &amp; schedule (MS Project/Primavera)
+                    </p>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      {status !== "authenticated" && (
+                        <button
+                          type="button"
+                          onClick={() => setAuthMode("signin")}
+                          style={{
+                            padding: "8px 16px",
+                            fontSize: 13,
+                            fontWeight: 500,
+                            color: "#fff",
+                            background: "#0f172a",
+                            border: "none",
+                            borderRadius: 6,
+                            cursor: "pointer",
+                            fontFamily: "inherit",
+                          }}
+                        >
+                          Sign in
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={handleCheckout}
+                        style={{
+                          padding: "8px 16px",
+                          fontSize: 13,
+                          fontWeight: 500,
+                          color: "#0ea5e9",
+                          background: "#f0f9ff",
+                          border: "1px solid #bae6fd",
+                          borderRadius: 6,
+                          cursor: "pointer",
+                          fontFamily: "inherit",
+                        }}
+                      >
+                        {status === "authenticated" ? "Subscribe to download" : "View pricing"}
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             )}
@@ -1036,7 +1067,7 @@ export default function Home() {
                     return first.length <= maxChars ? first : first.slice(0, maxChars).trim() + "…";
                   };
                   const brief = getBrief(d);
-                  const isExpanded = expandedProgressiveSections[key] ?? true;
+                  const isExpanded = expandedProgressiveSections[key] ?? false;
                   const toggleProgressive = () => setExpandedProgressiveSections((prev) => ({ ...prev, [key]: !prev[key] }));
                   let content: React.ReactNode;
                   if (key === "overview") {
