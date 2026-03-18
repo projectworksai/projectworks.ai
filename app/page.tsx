@@ -905,57 +905,10 @@ export default function Home() {
             order: isMobile ? 2 : undefined,
           }}
         >
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 12 }}>
             <h2 style={{ fontSize: "1rem", fontWeight: 600, color: "#0f172a", margin: 0 }}>
               Output
             </h2>
-            {!isPro && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 6, alignItems: "flex-start", flex: "1 1 auto", minWidth: 0 }}>
-                <p style={{ margin: 0, fontSize: 12, color: "#475569", lineHeight: 1.4 }}>
-                  {status !== "authenticated"
-                    ? "Sign in or subscribe to download Word/PDF. Schedule (MS Project / Primavera) requires a subscription."
-                    : "Subscribe to download Word/PDF and schedule for MS Project or Primavera."}
-                </p>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                  {status !== "authenticated" && (
-                    <button
-                      type="button"
-                      onClick={() => setAuthMode("signin")}
-                      style={{
-                        padding: "6px 12px",
-                        fontSize: 12,
-                        fontWeight: 500,
-                        color: "#fff",
-                        background: "#0f172a",
-                        border: "none",
-                        borderRadius: 6,
-                        cursor: "pointer",
-                        fontFamily: "inherit",
-                      }}
-                    >
-                      Sign in
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleCheckout}
-                    style={{
-                      padding: "6px 12px",
-                      fontSize: 12,
-                      fontWeight: 500,
-                      color: "#0ea5e9",
-                      background: "#f0f9ff",
-                      border: "1px solid #bae6fd",
-                      borderRadius: 6,
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                    }}
-                  >
-                    {status === "authenticated" ? "Subscribe to download" : "View pricing"}
-                  </button>
-                </div>
-              </div>
-            )}
             {hasSections && isPro && (
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 {isPro ? (
@@ -1072,6 +1025,71 @@ export default function Home() {
               </div>
             )}
           </div>
+          {!isPro && (
+            <div
+              style={{
+                marginBottom: 14,
+                padding: "10px 12px",
+                borderRadius: 10,
+                border: "1px solid #e2e8f0",
+                background: "#f8fafc",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 240, flex: "1 1 auto" }}>
+                <p style={{ margin: 0, fontSize: 12, color: "#0f172a", lineHeight: 1.35 }}>
+                  {status !== "authenticated"
+                    ? "Sign in or subscribe to download Word/PDF. Schedule (MS Project / Primavera) requires a subscription."
+                    : "Subscribe to download Word/PDF and schedule for MS Project or Primavera."}
+                </p>
+                <p style={{ margin: 0, fontSize: 11, color: "#64748b", lineHeight: 1.3 }}>
+                  Free: unlimited previews · Signed in: 1 full plan · Subscription: exports + schedules
+                </p>
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                {status !== "authenticated" && (
+                  <button
+                    type="button"
+                    onClick={() => setAuthMode("signin")}
+                    style={{
+                      padding: "7px 12px",
+                      fontSize: 12,
+                      fontWeight: 600,
+                      color: "#0f172a",
+                      background: "#ffffff",
+                      border: "1px solid #e2e8f0",
+                      borderRadius: 8,
+                      cursor: "pointer",
+                      fontFamily: "inherit",
+                    }}
+                  >
+                    Sign in
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleCheckout}
+                  style={{
+                    padding: "7px 12px",
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "#fff",
+                    background: "linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)",
+                    border: "none",
+                    borderRadius: 8,
+                    cursor: "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  {status === "authenticated" ? "Subscribe" : "View pricing"}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div style={{ flex: 1, overflow: "auto", fontSize: 13, lineHeight: 1.55 }}>
             {loading && !hasProgressive && (
@@ -1418,7 +1436,9 @@ export default function Home() {
                         }}
                       >
                         <span>{label}</span>
-                        <span style={{ fontSize: 18, color: "#64748b" }}>{isExpanded ? "−" : "+"}</span>
+                        <span style={{ fontSize: 12, color: "#64748b", fontWeight: 600 }}>
+                          {isExpanded ? "− collapse" : "+ expand"}
+                        </span>
                       </button>
                       {isExpanded ? (
                         <div style={{ fontSize: 12, color: "#334155", paddingTop: 4 }}>{content}</div>
@@ -1494,7 +1514,9 @@ export default function Home() {
                       }}
                     >
                       <span>{title}</span>
-                      <span style={{ fontSize: 18, color: "#64748b" }}>{isExpanded ? "−" : "+"}</span>
+                      <span style={{ fontSize: 12, color: "#64748b", fontWeight: 600 }}>
+                        {isExpanded ? "− collapse" : "+ expand"}
+                      </span>
                     </button>
                     {isExpanded && (
                       <div style={{ paddingTop: 4 }}>
