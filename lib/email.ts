@@ -42,3 +42,17 @@ export async function sendEmail(args: SendEmailArgs) {
   });
 }
 
+export async function sendResetEmail(to: string, resetLink: string) {
+  // Keep this aligned with the reset-token expiry used in the reset-password route (30 mins).
+  const subject = "Reset your password";
+  const text = `Click the link below to reset your password:\n\n${resetLink}\n\nThis link will expire in 30 minutes.`;
+  const html = `
+    <h2>Reset your password</h2>
+    <p>Click the link below to reset your password:</p>
+    <a href="${resetLink}">${resetLink}</a>
+    <p>This link will expire in 30 minutes.</p>
+  `;
+
+  await sendEmail({ to, subject, text, html });
+}
+
