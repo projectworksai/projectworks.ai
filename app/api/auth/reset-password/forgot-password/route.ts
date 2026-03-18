@@ -29,7 +29,7 @@ export async function POST(req: Request) {
   const resetLink = `${process.env.NEXT_PUBLIC_APP_URL}/reset-password?token=${token}`;
 
   // ✅ SEND EMAIL HERE
-  await sendResetEmail("karsem@gmail.com", "http://localhost:3000/reset?token=123");
+  await sendResetEmail(email, resetLink);
 
   return NextResponse.json({ success: true });
 }
