@@ -662,7 +662,44 @@ export default function Home() {
                       )}
                     </div>
                     {authError && (
-                      <p style={{ fontSize: 12, color: "#b91c1c" }}>{authError}</p>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        <p style={{ fontSize: 12, color: "#b91c1c", margin: 0 }}>{authError}</p>
+                        {authMode === "signin" && (
+                          <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAuthMode("signup");
+                                setAuthError("");
+                              }}
+                              style={{
+                                padding: 0,
+                                border: "none",
+                                background: "none",
+                                color: "#2563eb",
+                                fontSize: 12,
+                                fontWeight: 600,
+                                cursor: "pointer",
+                                fontFamily: "inherit",
+                                textAlign: "left",
+                              }}
+                            >
+                              Create an account
+                            </button>
+                            <a
+                              href="/forgot-password"
+                              style={{
+                                color: "#2563eb",
+                                fontSize: 12,
+                                fontWeight: 600,
+                                textDecoration: "none",
+                              }}
+                            >
+                              Forgot password?
+                            </a>
+                          </div>
+                        )}
+                      </div>
                     )}
                     <div style={{ display: "flex", gap: 8 }}>
                       <button

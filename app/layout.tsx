@@ -1,5 +1,6 @@
 import { DM_Sans } from "next/font/google";
 import { Providers } from "./providers";
+import type { Metadata } from "next";
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
@@ -7,6 +8,17 @@ const dmSans = DM_Sans({
   variable: "--font-dm-sans",
   display: "swap",
 });
+
+export const metadata: Metadata = {
+  title: "Plan Forge — ProjectWorks.ai",
+  description: "Turn tenders and specs into world-class project plans.",
+  icons: {
+    icon: [
+      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.svg", type: "image/svg+xml" },
+    ],
+  },
+};
 
 export default function RootLayout({
   children,

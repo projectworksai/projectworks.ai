@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="ProjectWorks.ai">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0ea5e9"/>
+      <stop offset="1" stop-color="#0f172a"/>
+    </linearGradient>
+  </defs>
+  <rect x="32" y="32" width="448" height="448" rx="112" fill="url(#g)"/>
+  <path d="M170 160h120c44 0 76 26 76 68 0 43-32 69-76 69h-55v55c0 8-7 15-15 15h-35c-8 0-15-7-15-15V175c0-8 7-15 15-15zm120 100c17 0 29-11 29-32 0-20-12-31-29-31h-55v63h55z" fill="#ffffff"/>
+  <path d="M170 376c0-8 7-15 15-15h142c8 0 15 7 15 15v8c0 8-7 15-15 15H185c-8 0-15-7-15-15v-8z" fill="#e2e8f0" opacity="0.9"/>
+</svg>
+
