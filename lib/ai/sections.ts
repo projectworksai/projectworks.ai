@@ -1,7 +1,166 @@
 import OpenAI from "openai";
 import { detectProjectType } from "@/lib/project-type";
 
-const MAX_RETRIES = 1;
+export type QualityGateConfig = {
+  profile: "dev" | "staging" | "prod";
+  enabled: boolean;
+  strictRetryEnabled: boolean;
+  maxRetries: number;
+  genericCheckEnabled: boolean;
+  minOverviewSummaryChars: number;
+  minOverviewObjectives: number;
+  minOverviewBudgetBreakdown: number;
+  minSchedulePhases: number;
+  minScheduleMilestones: number;
+  minScheduleTasks: number;
+  minResourcesRoles: number;
+  minResourcesLabour: number;
+  minResourcesContacts: number;
+  minOrganogramChars: number;
+  minPlantItems: number;
+  minQualityInspectionItems: number;
+  minQualityHoldPoints: number;
+  minQualityStandards: number;
+  minRiskItems: number;
+  minComplianceStandards: number;
+  minComplianceReferences: number;
+  minProcurementItems: number;
+  minScopeChars: number;
+};
+
+function boolFromEnv(value: string | undefined, fallback: boolean): boolean {
+  if (!value) return fallback;
+  const v = value.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(v)) return true;
+  if (["0", "false", "no", "off"].includes(v)) return false;
+  return fallback;
+}
+
+function intFromEnv(value: string | undefined, fallback: number, min = 0, max = 999): number {
+  if (!value) return fallback;
+  const n = Number.parseInt(value, 10);
+  if (Number.isNaN(n)) return fallback;
+  return Math.max(min, Math.min(max, n));
+}
+
+function getQualityProfile(): "dev" | "staging" | "prod" {
+  const raw = (process.env.AI_SECTION_QUALITY_PROFILE || "staging").trim().toLowerCase();
+  if (raw === "dev" || raw === "staging" || raw === "prod") return raw;
+  return "staging";
+}
+
+function presetConfig(profile: "dev" | "staging" | "prod"): Omit<QualityGateConfig, "profile"> {
+  if (profile === "dev") {
+    return {
+      enabled: true,
+      strictRetryEnabled: false,
+      maxRetries: 0,
+      genericCheckEnabled: true,
+      minOverviewSummaryChars: 70,
+      minOverviewObjectives: 2,
+      minOverviewBudgetBreakdown: 2,
+      minSchedulePhases: 3,
+      minScheduleMilestones: 3,
+      minScheduleTasks: 6,
+      minResourcesRoles: 3,
+      minResourcesLabour: 2,
+      minResourcesContacts: 2,
+      minOrganogramChars: 15,
+      minPlantItems: 3,
+      minQualityInspectionItems: 4,
+      minQualityHoldPoints: 2,
+      minQualityStandards: 2,
+      minRiskItems: 4,
+      minComplianceStandards: 2,
+      minComplianceReferences: 1,
+      minProcurementItems: 4,
+      minScopeChars: 120,
+    };
+  }
+  if (profile === "prod") {
+    return {
+      enabled: true,
+      strictRetryEnabled: true,
+      maxRetries: 1,
+      genericCheckEnabled: true,
+      minOverviewSummaryChars: 100,
+      minOverviewObjectives: 4,
+      minOverviewBudgetBreakdown: 5,
+      minSchedulePhases: 5,
+      minScheduleMilestones: 5,
+      minScheduleTasks: 14,
+      minResourcesRoles: 5,
+      minResourcesLabour: 4,
+      minResourcesContacts: 4,
+      minOrganogramChars: 25,
+      minPlantItems: 5,
+      minQualityInspectionItems: 8,
+      minQualityHoldPoints: 4,
+      minQualityStandards: 3,
+      minRiskItems: 8,
+      minComplianceStandards: 4,
+      minComplianceReferences: 3,
+      minProcurementItems: 6,
+      minScopeChars: 240,
+    };
+  }
+  return {
+    enabled: true,
+    strictRetryEnabled: true,
+    maxRetries: 1,
+    genericCheckEnabled: true,
+    minOverviewSummaryChars: 80,
+    minOverviewObjectives: 3,
+    minOverviewBudgetBreakdown: 3,
+    minSchedulePhases: 4,
+    minScheduleMilestones: 4,
+    minScheduleTasks: 10,
+    minResourcesRoles: 4,
+    minResourcesLabour: 3,
+    minResourcesContacts: 3,
+    minOrganogramChars: 20,
+    minPlantItems: 4,
+    minQualityInspectionItems: 6,
+    minQualityHoldPoints: 3,
+    minQualityStandards: 2,
+    minRiskItems: 5,
+    minComplianceStandards: 3,
+    minComplianceReferences: 2,
+    minProcurementItems: 5,
+    minScopeChars: 180,
+  };
+}
+
+export function getQualityGateConfig(): QualityGateConfig {
+  const profile = getQualityProfile();
+  const preset = presetConfig(profile);
+  return {
+    profile,
+    enabled: boolFromEnv(process.env.AI_SECTION_QUALITY_GATE_ENABLED, preset.enabled),
+    strictRetryEnabled: boolFromEnv(process.env.AI_SECTION_STRICT_RETRY_ENABLED, preset.strictRetryEnabled),
+    maxRetries: intFromEnv(process.env.AI_SECTION_MAX_RETRIES, preset.maxRetries, 0, 5),
+    genericCheckEnabled: boolFromEnv(process.env.AI_SECTION_GENERIC_CHECK_ENABLED, preset.genericCheckEnabled),
+    minOverviewSummaryChars: intFromEnv(process.env.AI_MIN_OVERVIEW_SUMMARY_CHARS, preset.minOverviewSummaryChars, 20, 500),
+    minOverviewObjectives: intFromEnv(process.env.AI_MIN_OVERVIEW_OBJECTIVES, preset.minOverviewObjectives, 1, 20),
+    minOverviewBudgetBreakdown: intFromEnv(process.env.AI_MIN_OVERVIEW_BUDGET_BREAKDOWN, preset.minOverviewBudgetBreakdown, 1, 20),
+    minSchedulePhases: intFromEnv(process.env.AI_MIN_SCHEDULE_PHASES, preset.minSchedulePhases, 1, 20),
+    minScheduleMilestones: intFromEnv(process.env.AI_MIN_SCHEDULE_MILESTONES, preset.minScheduleMilestones, 1, 30),
+    minScheduleTasks: intFromEnv(process.env.AI_MIN_SCHEDULE_TASKS, preset.minScheduleTasks, 1, 200),
+    minResourcesRoles: intFromEnv(process.env.AI_MIN_RESOURCES_ROLES, preset.minResourcesRoles, 1, 30),
+    minResourcesLabour: intFromEnv(process.env.AI_MIN_RESOURCES_LABOUR, preset.minResourcesLabour, 1, 30),
+    minResourcesContacts: intFromEnv(process.env.AI_MIN_RESOURCES_CONTACTS, preset.minResourcesContacts, 1, 30),
+    minOrganogramChars: intFromEnv(process.env.AI_MIN_RESOURCES_ORGANOGRAM_CHARS, preset.minOrganogramChars, 5, 500),
+    minPlantItems: intFromEnv(process.env.AI_MIN_PLANT_ITEMS, preset.minPlantItems, 1, 50),
+    minQualityInspectionItems: intFromEnv(process.env.AI_MIN_QUALITY_ITP_ITEMS, preset.minQualityInspectionItems, 1, 50),
+    minQualityHoldPoints: intFromEnv(process.env.AI_MIN_QUALITY_HOLD_POINTS, preset.minQualityHoldPoints, 1, 30),
+    minQualityStandards: intFromEnv(process.env.AI_MIN_QUALITY_STANDARDS, preset.minQualityStandards, 1, 20),
+    minRiskItems: intFromEnv(process.env.AI_MIN_RISK_ITEMS, preset.minRiskItems, 1, 50),
+    minComplianceStandards: intFromEnv(process.env.AI_MIN_COMPLIANCE_STANDARDS, preset.minComplianceStandards, 1, 30),
+    minComplianceReferences: intFromEnv(process.env.AI_MIN_COMPLIANCE_REFERENCES, preset.minComplianceReferences, 1, 30),
+    minProcurementItems: intFromEnv(process.env.AI_MIN_PROCUREMENT_ITEMS, preset.minProcurementItems, 1, 30),
+    minScopeChars: intFromEnv(process.env.AI_MIN_SCOPE_CHARS, preset.minScopeChars, 50, 2000),
+  };
+}
 
 function getClient(): OpenAI {
   const key = process.env.OPENAI_API_KEY;
@@ -15,6 +174,127 @@ function getClient(): OpenAI {
 export type SectionResult =
   | { success: true; data: Record<string, unknown> }
   | { success: false; code: string; message: string };
+
+function isWeakSectionData(section: SectionKey, data: Record<string, unknown>, cfg: QualityGateConfig): boolean {
+  const txt = (v: unknown) => (v == null ? "" : String(v).trim());
+  const arr = (v: unknown) => (Array.isArray(v) ? v : []);
+  const looksGeneric = (s: string) =>
+    cfg.genericCheckEnabled && /lorem|tbd|to be determined|generic|placeholder|as required|sample/i.test(s);
+
+  if (section === "overview") {
+    const summary = txt(data.summary);
+    const objectives = arr(data.objectives);
+    const budget = txt(data.budgetEstimate);
+    const breakdown = arr(data.budgetBreakdown);
+    return (
+      summary.length < cfg.minOverviewSummaryChars ||
+      objectives.length < cfg.minOverviewObjectives ||
+      !budget ||
+      breakdown.length < cfg.minOverviewBudgetBreakdown ||
+      looksGeneric(summary)
+    );
+  }
+
+  if (section === "schedule") {
+    const phases = arr(data.phases);
+    const milestones = arr(data.milestones);
+    const tasks = arr(data.tasks);
+    const hasShallowWbs = tasks.some((t) => {
+      const w = txt((t as Record<string, unknown>).wbs);
+      return w.split(".").length < 2;
+    });
+    return (
+      phases.length < cfg.minSchedulePhases ||
+      milestones.length < cfg.minScheduleMilestones ||
+      tasks.length < cfg.minScheduleTasks ||
+      hasShallowWbs
+    );
+  }
+
+  if (section === "resources") {
+    const roles = arr(data.roles);
+    const labour = arr(data.labourBreakdown);
+    const contacts = arr(data.contacts);
+    const organogram = txt(data.organogram);
+    return (
+      roles.length < cfg.minResourcesRoles ||
+      labour.length < cfg.minResourcesLabour ||
+      contacts.length < cfg.minResourcesContacts ||
+      organogram.length < cfg.minOrganogramChars
+    );
+  }
+
+  if (section === "plantAndEquipment") {
+    const equipment = arr(data.equipment);
+    const hasCapacity = equipment.some((e) => txt((e as Record<string, unknown>).capacity).length > 0);
+    return equipment.length < cfg.minPlantItems || !hasCapacity;
+  }
+
+  if (section === "qualityManagement") {
+    const itp = arr(data.inspectionAndTest);
+    const hold = arr(data.holdPoints);
+    const standards = arr(data.standards);
+    return (
+      itp.length < cfg.minQualityInspectionItems ||
+      hold.length < cfg.minQualityHoldPoints ||
+      standards.length < cfg.minQualityStandards
+    );
+  }
+
+  if (section === "risk") {
+    const rr = arr(data.riskRegister);
+    return rr.length < cfg.minRiskItems;
+  }
+
+  if (section === "compliance") {
+    const standards = arr(data.standards);
+    const refs = arr(data.sourceReferences);
+    return standards.length < cfg.minComplianceStandards || refs.length < cfg.minComplianceReferences;
+  }
+
+  if (section === "procurement") {
+    const items = arr(data.items);
+    return items.length < cfg.minProcurementItems;
+  }
+
+  if (section === "scope") {
+    const sw = txt(data.scopeOfWork);
+    return sw.length < cfg.minScopeChars || looksGeneric(sw);
+  }
+
+  return false;
+}
+
+function stricterPromptForSection(section: SectionKey): string {
+  if (section === "overview") {
+    return `QUALITY GATE (STRICT): budgetEstimate and budgetBreakdown are mandatory. Provide at least 5 budget breakdown lines with basis notes. If no explicit budget is supplied, infer a realistic range with assumptions.`;
+  }
+  if (section === "schedule") {
+    return `QUALITY GATE (STRICT): Provide 10-20 schedule tasks with project-specific multi-level WBS (e.g. 1.1, 1.2, 2.1). Avoid generic labels.`;
+  }
+  if (section === "resources") {
+    return `QUALITY GATE (STRICT): Include complete organogram text, 4+ roles, labourBreakdown entries, and contact details.`;
+  }
+  if (section === "plantAndEquipment") {
+    return `QUALITY GATE (STRICT): Plant/equipment must include quantity and capacity/spec for major items, tied to project activities.`;
+  }
+  if (section === "qualityManagement") {
+    return `QUALITY GATE (STRICT): Include practical ITP and hold points mapped to scope activities and standards.`;
+  }
+  if (section === "risk") {
+    return `QUALITY GATE (STRICT): Include 8-12 risks in riskRegister with valid L,S,Score and clear owner/mitigation.`;
+  }
+  if (section === "compliance") {
+    return `QUALITY GATE (STRICT): include explicit standards and sourceReferences that cite client/spec/attachments if mentioned.`;
+  }
+  if (section === "procurement") {
+    return `QUALITY GATE (STRICT): Provide detailed procurement lines with lead times and values/categories.`;
+  }
+  if (section === "scope") {
+    return `QUALITY GATE (STRICT): scopeOfWork must be specific, detailed, and non-generic with clear boundaries/inclusions/exclusions.`;
+  }
+  return `QUALITY GATE (STRICT): Provide detailed, project-specific and non-generic content.`;
+}
 
 const SECTION_PROMPTS: Record<string, string> = {
   overview: `You are a project management expert. Given a project brief, return ONLY valid JSON (no markdown) with this structure:
@@ -48,18 +328,20 @@ Be specific to the project.`,
   "keyDates": [{"label": "date label", "week": number}, ...] or [],
   "tasks": [{"id": "1", "name": "Task name", "phase": "Phase name", "wbs": "1.1", "durationDays": number, "startOffsetDays": number, "dependencies": ["id of predecessor"]}, ...]
 }
-Include at least 3-5 phases and 3-5 milestones. tasks must be a flat list for MS Project/Primavera: id (string), name, phase, wbs, durationDays, startOffsetDays (days from project start), dependencies (array of predecessor task ids). Use numbers for durations and weeks.`,
+Include at least 3-5 phases and 3-5 milestones. tasks must be a flat list for MS Project/Primavera: id (string), name, phase, wbs, durationDays, startOffsetDays (days from project start), dependencies (array of predecessor task ids). Use numbers for durations and weeks.
+WBS must be detailed and project-specific (multi-level where relevant, not generic).`,
 
   resources: `You are a project management expert. Given a project brief, return ONLY valid JSON (no markdown) with this structure:
 {
   "roles": [{"role": "Role name", "count": number or 1, "responsibilities": "brief summary"}, ...],
+  "labourBreakdown": [{"discipline": "e.g. Civil crew", "count": number, "utilisation": "e.g. peak weeks 4-10"}] or [],
   "contacts": [{"role": "Role", "name": "Person", "phone": "optional", "email": "optional"}] or [],
   "organogram": "Simple text organogram using arrows and hierarchy lines",
   "equipment": [{"item": "Equipment/plant", "quantity": number or "as required", "notes": "optional"}, ...],
   "assumptions": ["resource assumption 1", ...],
   "organisationSummary": "Short narrative on resourcing approach"
 }
-Be practical and aligned with the project.`,
+Be practical, non-generic, and aligned with the project.`,
 
   procurement: `You are a project management expert. Given a project brief, return ONLY valid JSON (no markdown) with this structure:
 {
@@ -100,7 +382,8 @@ Constraints:
   "standards": [{"code": "e.g. AS 1234", "description": "what it applies to"}, ...],
   "checklists": [{"name": "Checklist or regime", "items": ["item 1", ...]}, ...] or [],
   "complianceNotes": "Brief narrative on compliance approach",
-  "regulatoryRequirements": ["requirement 1", ...] or []
+  "regulatoryRequirements": ["requirement 1", ...] or [],
+  "sourceReferences": [{"type": "client|specification|standard|attachment", "reference": "explicit mention from input"}] or []
 }
 Reference relevant Australian/industry standards where applicable.`,
 
@@ -110,6 +393,7 @@ Reference relevant Australian/industry standards where applicable.`,
   "objectives": ["quality objective 1", ...],
   "standards": ["e.g. AS/ISO or client standard", ...],
   "inspectionAndTest": ["ITP item or inspection activity", ...],
+  "holdPoints": ["critical hold point 1", ...] or [],
   "defectsManagement": "How defects and NCRs are managed",
   "qualityRecords": ["type of record to be maintained", ...]
 }
@@ -118,12 +402,12 @@ Focus on construction project quality management (for non-construction, adapt to
   plantAndEquipment: `You are a project management expert. Given a project brief, return ONLY valid JSON (no markdown) with this structure:
 {
   "summary": "Brief overview of plant and equipment strategy (1-2 paragraphs)",
-  "equipment": [{"item": "Plant/equipment name", "quantity": number or "as required", "use": "brief use or phase", "notes": "optional"}],
+  "equipment": [{"item": "Plant/equipment name", "quantity": number or "as required", "capacity": "rated capacity/spec", "use": "brief use or phase", "notes": "optional"}],
   "majorPlant": ["key plant items with brief spec", ...],
   "maintenanceAndAvailability": "How maintenance and availability are ensured",
   "assumptions": ["assumption 1", ...]
 }
-Be specific to the project. If the project is non-construction, treat this section as tools/platforms/infrastructure/resources (still use the same JSON fields). If hybrid, include both.`,
+Be specific to the project (no generic lists). If the project is non-construction, treat this section as tools/platforms/infrastructure/resources (still use the same JSON fields). If hybrid, include both.`,
 
   constructionMethodology: `You are a project management expert. Given a project brief, return ONLY valid JSON (no markdown) with this structure:
 {
@@ -172,6 +456,7 @@ export async function generateSection(
   section: SectionKey,
   projectPrompt: string
 ): Promise<SectionResult> {
+  const qualityGateConfig = getQualityGateConfig();
   const projectType = detectProjectType(projectPrompt);
   const adaptiveRules =
     projectType === "construction"
@@ -212,13 +497,21 @@ export async function generateSection(
 
   const openai = getClient();
   let lastError: Error | null = null;
+  const strictInstruction = stricterPromptForSection(section);
+  const effectiveMaxRetries =
+    qualityGateConfig.enabled && qualityGateConfig.strictRetryEnabled ? qualityGateConfig.maxRetries : 0;
 
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+  for (let attempt = 0; attempt <= effectiveMaxRetries; attempt++) {
     try {
+      const strictPass =
+        qualityGateConfig.enabled &&
+        qualityGateConfig.strictRetryEnabled &&
+        attempt === effectiveMaxRetries &&
+        effectiveMaxRetries > 0;
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: systemPrompt },
+          { role: "system", content: strictPass ? `${systemPrompt}\n\n${strictInstruction}` : systemPrompt },
           { role: "user", content: projectPrompt },
         ],
         temperature: 0.3,
@@ -233,6 +526,15 @@ export async function generateSection(
 
       const parsed = parseJsonFromContent(content);
       if (parsed && typeof parsed === "object" && Object.keys(parsed).length > 0) {
+        if (
+          qualityGateConfig.enabled &&
+          qualityGateConfig.strictRetryEnabled &&
+          isWeakSectionData(section, parsed, qualityGateConfig) &&
+          !strictPass
+        ) {
+          lastError = new Error("Weak section content, retrying with stricter prompt");
+          continue;
+        }
         return { success: true, data: parsed };
       }
       lastError = new Error("Invalid JSON structure from AI");

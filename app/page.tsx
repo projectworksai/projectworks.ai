@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import {
   getMainSectionsOnly,
@@ -46,6 +46,7 @@ export default function Home() {
   const [isMobile, setIsMobile] = useState(false);
   const [generationMode, setGenerationMode] = useState<"preview" | "full" | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const generationAbortRef = useRef<AbortController | null>(null);
 
   type ProgressiveStep = "pending" | "loading" | "done" | "error";
   const PROGRESSIVE_SECTIONS = [
@@ -76,16 +77,25 @@ export default function Home() {
   }, [update]);
 
   const buildProjectPrompt = useCallback(() => {
+    const attachmentNotes = [
+      tenderFile ? `Tender document provided: ${tenderFile.name}` : "",
+      technicalSpecFile ? `Technical specification provided: ${technicalSpecFile.name}` : "",
+    ].filter(Boolean);
     const parts = [
       projectName ? `Project name: ${projectName}` : "",
       client ? `Client: ${client}` : "",
       location ? `Location: ${location}` : "",
       prompt ? `Project brief:\n${prompt}` : "",
+      attachmentNotes.length > 0 ? `Attachments:\n- ${attachmentNotes.join("\n- ")}` : "",
+      "Output rules: Provide a professional, comprehensive project document. Use project-specific WBS (not generic), pricing schedule and budget estimate breakdown even when no explicit budget is provided, project-relevant plant/equipment/labour with capacities and quantities where applicable, and explicitly reference client/specification/standards when mentioned.",
     ].filter(Boolean);
     return parts.join("\n\n");
-  }, [projectName, client, location, prompt]);
+  }, [projectName, client, location, prompt, tenderFile, technicalSpecFile]);
 
   const generateProgressive = useCallback(async () => {
+    generationAbortRef.current?.abort();
+    const controller = new AbortController();
+    generationAbortRef.current = controller;
     const projectPrompt = buildProjectPrompt();
     if (!projectPrompt.trim()) {
       setError("Please enter a project brief or details.");
@@ -123,6 +133,7 @@ export default function Home() {
         const res = await fetch(`/api/generate/${section}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
           body: JSON.stringify({ projectPrompt }),
         });
         const json = await res.json().catch(() => ({}));
@@ -134,12 +145,17 @@ export default function Home() {
         setProgressiveState((prev) => ({ ...prev, [section]: "done" }));
         setProgressiveData((prev) => ({ ...prev, [section]: (json.data ?? {}) as Record<string, unknown> }));
       } catch (e) {
+        if (e instanceof Error && e.name === "AbortError") {
+          setError("Generation cancelled.");
+          break;
+        }
         setProgressiveState((prev) => ({ ...prev, [section]: "error" }));
         setError(e instanceof Error ? e.message : `Failed to generate ${section}`);
         break;
       }
     }
     setLoading(false);
+    if (generationAbortRef.current === controller) generationAbortRef.current = null;
   }, [buildProjectPrompt]);
 
   const generate = useCallback(async () => {
@@ -147,6 +163,9 @@ export default function Home() {
       await generateProgressive();
       return;
     }
+    generationAbortRef.current?.abort();
+    const controller = new AbortController();
+    generationAbortRef.current = controller;
     setLoading(true);
     setError("");
     setData(null);
@@ -162,6 +181,7 @@ export default function Home() {
 
       const res = await fetch("/api/generate", {
         method: "POST",
+        signal: controller.signal,
         body: formData,
       });
       const json = await res.json().catch(() => ({}));
@@ -174,11 +194,22 @@ export default function Home() {
       setGenerationMode((json.mode as "preview" | "full") || null);
       setData(json.data ?? {});
     } catch (e) {
+      if (e instanceof Error && e.name === "AbortError") {
+        setError("Generation cancelled.");
+      } else {
       setError(e instanceof Error && e.message ? e.message : "Generation failed. Please try again.");
+      }
     } finally {
       setLoading(false);
+      if (generationAbortRef.current === controller) generationAbortRef.current = null;
     }
   }, [prompt, projectName, client, location, tenderFile, technicalSpecFile, status, useProgressive, generateProgressive]);
+
+  const cancelGeneration = useCallback(() => {
+    generationAbortRef.current?.abort();
+    generationAbortRef.current = null;
+    setLoading(false);
+  }, []);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -208,6 +239,7 @@ export default function Home() {
       const risk = progressiveData.risk as Record<string, unknown> | undefined;
       const safety = progressiveData["safety-management"] as Record<string, unknown> | undefined;
       const compliance = progressiveData.compliance as Record<string, unknown> | undefined;
+      const sourceDocs = [tenderFile?.name, technicalSpecFile?.name].filter(Boolean) as string[];
 
       const planForExport: Record<string, unknown> =
         data ??
@@ -331,6 +363,12 @@ export default function Home() {
                       .map((d) => `${String(d.label ?? "Date")} (week ${String(d.week ?? "—")})`)
                       .join("; ")}`
                   : "",
+                Array.isArray(schedule.tasks)
+                  ? `WBS tasks: ${(schedule.tasks as Array<Record<string, unknown>>)
+                      .slice(0, 60)
+                      .map((t) => `${String(t.wbs ?? "")} ${String(t.name ?? "")} (${String(t.durationDays ?? "—")}d)`)
+                      .join("; ")}`
+                  : "",
               ]
                 .filter(Boolean)
                 .join("\n\n")
@@ -344,6 +382,30 @@ export default function Home() {
                       .join("; ")}`
                   : "",
                 compliance.regulatoryRequirements ? `Regulatory: ${joinArr(compliance.regulatoryRequirements)}` : "",
+                Array.isArray(compliance.sourceReferences)
+                  ? `Source references: ${(compliance.sourceReferences as Array<Record<string, unknown>>)
+                      .map((s) => `${String(s.type ?? "reference")}: ${String(s.reference ?? "")}`)
+                      .join("; ")}`
+                  : "",
+              ]
+                .filter(Boolean)
+                .join("\n\n")
+            : "",
+          appendixRiskMatrix: risk && Array.isArray((risk as Record<string, unknown>).riskRegister)
+            ? (risk as Record<string, unknown>).riskRegister
+            : "",
+          appendixProjectProgram: schedule
+            ? [
+                Array.isArray(schedule.phases)
+                  ? `Phases: ${(schedule.phases as Array<Record<string, unknown>>)
+                      .map((p) => `${String(p.name ?? "")} (${String(p.durationWeeks ?? "—")} weeks)`)
+                      .join("; ")}`
+                  : "",
+                Array.isArray(schedule.milestones)
+                  ? `Milestones: ${(schedule.milestones as Array<Record<string, unknown>>)
+                      .map((m) => `${String(m.name ?? "")} (week ${String(m.targetWeek ?? "—")})`)
+                      .join("; ")}`
+                  : "",
               ]
                 .filter(Boolean)
                 .join("\n\n")
@@ -351,6 +413,16 @@ export default function Home() {
           appendixInspectionAndTestPlan: quality && Array.isArray((quality as Record<string, unknown>).inspectionAndTest)
             ? (quality as Record<string, unknown>).inspectionAndTest
             : "",
+          appendixReferenceNotes: [
+            sourceDocs.length > 0 ? `Referenced attachments: ${sourceDocs.join("; ")}` : "",
+            compliance && Array.isArray((compliance as Record<string, unknown>).sourceReferences)
+              ? `Compliance references: ${((compliance as Record<string, unknown>).sourceReferences as Array<Record<string, unknown>>)
+                  .map((s) => `${String(s.type ?? "reference")}: ${String(s.reference ?? "")}`)
+                  .join("; ")}`
+              : "",
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
         } as Record<string, unknown>);
 
       const res = await fetch("/api/export", {
@@ -378,7 +450,7 @@ export default function Home() {
     } finally {
       setDownloading(false);
     }
-  }, [data, projectName, progressiveData]);
+  }, [data, projectName, progressiveData, tenderFile, technicalSpecFile]);
 
   const schedulePlanForExport = data ?? (progressiveData.schedule && Array.isArray(progressiveData.schedule.tasks) && (progressiveData.schedule.tasks as unknown[]).length > 0
     ? { schedule: progressiveData.schedule.tasks }
@@ -1100,6 +1172,27 @@ export default function Home() {
             >
               {loading ? "Generating…" : "Generate project plan"}
             </button>
+            {loading && (
+              <button
+                type="button"
+                onClick={cancelGeneration}
+                style={{
+                  width: "100%",
+                  marginTop: 8,
+                  padding: "10px 14px",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "#0f172a",
+                  background: "#f8fafc",
+                  border: "1px solid #cbd5e1",
+                  borderRadius: 8,
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                }}
+              >
+                Cancel generation
+              </button>
+            )}
 
             {error && (
               <p style={{ color: "#b91c1c", fontSize: 13, marginTop: 12 }}>{error}</p>
@@ -1600,12 +1693,23 @@ export default function Home() {
                     );
                   } else if (key === "resources") {
                     const roles = Array.isArray(d.roles) ? d.roles : [];
+                    const labourBreakdown = Array.isArray(d.labourBreakdown) ? d.labourBreakdown : [];
+                    const contacts = Array.isArray(d.contacts) ? d.contacts : [];
+                    const organogram = d.organogram != null ? String(d.organogram) : "";
                     const equipment = Array.isArray(d.equipment) ? d.equipment : [];
                     const assumptions = Array.isArray(d.assumptions) ? d.assumptions : [];
                     const orgSummary = d.organisationSummary != null ? String(d.organisationSummary) : "";
                     content = (
                       <>
                         {orgSummary && <p style={{ margin: "0 0 8px 0" }}>{orgSummary}</p>}
+                        {organogram && (
+                          <>
+                            <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Organogram</p>
+                            <div style={{ margin: "0 0 8px 0", whiteSpace: "pre-wrap", padding: "8px 10px", border: "1px solid #e2e8f0", borderRadius: 6, background: "#fff" }}>
+                              {organogram}
+                            </div>
+                          </>
+                        )}
                         {roles.length > 0 && (
                           <>
                             <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Roles</p>
@@ -1616,12 +1720,32 @@ export default function Home() {
                             </ul>
                           </>
                         )}
+                        {labourBreakdown.length > 0 && (
+                          <>
+                            <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Labour breakdown</p>
+                            <ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>
+                              {labourBreakdown.map((l: Record<string, unknown>, i: number) => (
+                                <li key={i}>{String(l.discipline)} ({String(l.count ?? "—")}){l.utilisation ? ` — ${String(l.utilisation)}` : ""}</li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
+                        {contacts.length > 0 && (
+                          <>
+                            <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Contacts</p>
+                            <ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>
+                              {contacts.map((c: Record<string, unknown>, i: number) => (
+                                <li key={i}>{String(c.role ?? "")}: {String(c.name ?? "")}{c.phone ? ` · ${String(c.phone)}` : ""}{c.email ? ` · ${String(c.email)}` : ""}</li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
                         {equipment.length > 0 && (
                           <>
                             <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Equipment</p>
                             <ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>
                               {equipment.map((e: Record<string, unknown>, i: number) => (
-                                <li key={i}>{String(e.item)} {e.quantity != null ? `· ${String(e.quantity)}` : ""} {e.notes ? `— ${String(e.notes)}` : ""}</li>
+                                <li key={i}>{String(e.item)} {e.quantity != null ? `· ${String(e.quantity)}` : ""} {e.capacity ? `· ${String(e.capacity)}` : ""} {e.notes ? `— ${String(e.notes)}` : ""}</li>
                               ))}
                             </ul>
                           </>
@@ -1671,6 +1795,7 @@ export default function Home() {
                     const checklists = Array.isArray(d.checklists) ? d.checklists : [];
                     const notes = d.complianceNotes != null ? String(d.complianceNotes) : "";
                     const regulatory = Array.isArray(d.regulatoryRequirements) ? d.regulatoryRequirements : [];
+                    const sourceReferences = Array.isArray(d.sourceReferences) ? d.sourceReferences : [];
                     content = (
                       <>
                         {notes && <p style={{ margin: "0 0 8px 0" }}>{notes}</p>}
@@ -1705,6 +1830,16 @@ export default function Home() {
                             </ul>
                           </>
                         )}
+                        {sourceReferences.length > 0 && (
+                          <>
+                            <p style={{ margin: "8px 0 4px 0", fontWeight: 600 }}>Source references</p>
+                            <ul style={{ margin: 0, paddingLeft: 18 }}>
+                              {sourceReferences.map((s: Record<string, unknown>, i: number) => (
+                                <li key={i}>{String(s.type ?? "reference")}: {String(s.reference ?? "")}</li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
                       </>
                     );
                   } else if (key === "quality-management") {
@@ -1712,6 +1847,7 @@ export default function Home() {
                     const objectives = Array.isArray(d.objectives) ? d.objectives : [];
                     const standards = Array.isArray(d.standards) ? d.standards : [];
                     const inspectionAndTest = Array.isArray(d.inspectionAndTest) ? d.inspectionAndTest : [];
+                    const holdPoints = Array.isArray(d.holdPoints) ? d.holdPoints : [];
                     const defectsManagement = d.defectsManagement != null ? String(d.defectsManagement) : "";
                     const qualityRecords = Array.isArray(d.qualityRecords) ? d.qualityRecords : [];
                     content = (
@@ -1720,6 +1856,7 @@ export default function Home() {
                         {objectives.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Objectives</p><ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{objectives.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul></>)}
                         {standards.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Standards</p><ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{standards.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul></>)}
                         {inspectionAndTest.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Inspection &amp; test</p><ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{inspectionAndTest.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul></>)}
+                        {holdPoints.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Hold points</p><ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{holdPoints.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul></>)}
                         {defectsManagement && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Defects management</p><p style={{ margin: "0 0 8px 0" }}>{defectsManagement}</p></>)}
                         {qualityRecords.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Quality records</p><ul style={{ margin: 0, paddingLeft: 18 }}>{qualityRecords.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul></>)}
                       </>
@@ -1733,7 +1870,7 @@ export default function Home() {
                     content = (
                       <>
                         {summary && <p style={{ margin: "0 0 8px 0" }}>{summary}</p>}
-                        {equipment.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Equipment</p><ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{equipment.map((e: Record<string, unknown>, i: number) => <li key={i}>{String(e.item)} {e.quantity != null ? `· ${String(e.quantity)}` : ""} {e.use ? `— ${String(e.use)}` : ""}</li>)}</ul></>)}
+                        {equipment.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Equipment</p><ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{equipment.map((e: Record<string, unknown>, i: number) => <li key={i}>{String(e.item)} {e.quantity != null ? `· ${String(e.quantity)}` : ""} {e.capacity ? `· ${String(e.capacity)}` : ""} {e.use ? `— ${String(e.use)}` : ""}</li>)}</ul></>)}
                         {majorPlant.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Major plant</p><ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{majorPlant.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul></>)}
                         {maintenance && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Maintenance &amp; availability</p><p style={{ margin: "0 0 8px 0" }}>{maintenance}</p></>)}
                         {assumptions.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Assumptions</p><ul style={{ margin: 0, paddingLeft: 18 }}>{assumptions.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul></>)}
