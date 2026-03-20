@@ -20,10 +20,42 @@ function getSmtpConfig() {
   return { host, port, user, pass, from };
 }
 
+function getResendConfig() {
+  const apiKey = process.env.RESEND_API_KEY;
+  const from = process.env.RESEND_FROM || process.env.SMTP_FROM;
+  if (!apiKey || !from) return null;
+  return { apiKey, from };
+}
+
 export async function sendEmail(args: SendEmailArgs) {
+  const resend = getResendConfig();
+  if (resend) {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${resend.apiKey}`,
+      },
+      body: JSON.stringify({
+        from: resend.from,
+        to: [args.to],
+        subject: args.subject,
+        html: args.html,
+        text: args.text,
+      }),
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      throw new Error(`Resend send failed (${res.status}): ${body || "Unknown error"}`);
+    }
+    return;
+  }
+
   const cfg = getSmtpConfig();
   if (!cfg) {
-    throw new Error("Email service is not configured (set SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM).");
+    throw new Error(
+      "Email service is not configured. Use either RESEND_API_KEY + RESEND_FROM (recommended) or SMTP_HOST/SMTP_PORT/SMTP_USER/SMTP_PASS/SMTP_FROM."
+    );
   }
 
   const transporter = nodemailer.createTransport({
