@@ -28,7 +28,6 @@ const CONSTRUCTION_KEYWORDS = [
 
 const NON_CONSTRUCTION_KEYWORDS = [
   "software",
-  "it",
   "product",
   "platform",
   "saas",
@@ -44,10 +43,39 @@ const NON_CONSTRUCTION_KEYWORDS = [
   "sprint",
   "crm",
   "customer",
-  "app",
   "application",
   "integration",
   "migration",
+];
+
+const STRONG_CONSTRUCTION_KEYWORDS = [
+  "boq",
+  "excavation",
+  "concrete",
+  "earthworks",
+  "swms",
+  "itp",
+  "pipeline",
+  "culvert",
+  "crane",
+  "formwork",
+  "pavement",
+];
+
+const STRONG_NON_CONSTRUCTION_KEYWORDS = [
+  "software",
+  "saas",
+  "app",
+  "application",
+  "product",
+  "agile",
+  "scrum",
+  "sprint",
+  "crm",
+  "api",
+  "integration",
+  "data migration",
+  "digital transformation",
 ];
 
 const QUALITY_RELEVANCE_KEYWORDS = [
@@ -65,13 +93,38 @@ const QUALITY_RELEVANCE_KEYWORDS = [
 
 export function detectProjectType(input: string): ProjectType {
   const t = input.toLowerCase();
-  const hasConstruction = CONSTRUCTION_KEYWORDS.some((w) => t.includes(w));
-  const hasNonConstruction = NON_CONSTRUCTION_KEYWORDS.some((w) => t.includes(w));
+  const hit = (kw: string): boolean => {
+    const safe = kw.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(^|\\W)${safe}(\\W|$)`, "i").test(t);
+  };
+  const constructionHits = CONSTRUCTION_KEYWORDS.filter((w) => hit(w)).length;
+  const nonConstructionHits = NON_CONSTRUCTION_KEYWORDS.filter((w) => hit(w)).length;
+  const strongConstructionHits = STRONG_CONSTRUCTION_KEYWORDS.filter((w) => hit(w)).length;
+  const strongNonConstructionHits = STRONG_NON_CONSTRUCTION_KEYWORDS.filter((w) => hit(w)).length;
+  const hasConstruction = constructionHits > 0;
+  const hasNonConstruction = nonConstructionHits > 0;
 
-  if (hasConstruction && hasNonConstruction) return "hybrid";
-  if (hasConstruction) return "construction";
+  // Strong-signal short-circuits to reduce false positives.
+  if (strongNonConstructionHits >= 2 && strongConstructionHits === 0) {
+    return "non_construction";
+  }
+  if (strongConstructionHits >= 2 && strongNonConstructionHits === 0) {
+    return "construction";
+  }
+
+  if (hasConstruction && hasNonConstruction) {
+    if (constructionHits >= nonConstructionHits + 3 && strongNonConstructionHits === 0) return "construction";
+    if (nonConstructionHits >= constructionHits + 2 && strongConstructionHits === 0) return "non_construction";
+    return "hybrid";
+  }
+  if (hasConstruction) {
+    // Require stronger confidence to avoid forcing construction domains on non-construction briefs.
+    if (constructionHits === 1 && strongConstructionHits === 0) return "non_construction";
+    return "construction";
+  }
   if (hasNonConstruction) return "non_construction";
-  return "construction";
+  // Bias to non-construction when signals are weak/unknown to prevent construction-domain leakage.
+  return "non_construction";
 }
 
 export const DOMAIN_CONFIG = {

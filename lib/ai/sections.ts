@@ -53,6 +53,8 @@ Include at least 3-5 phases and 3-5 milestones. tasks must be a flat list for MS
   resources: `You are a project management expert. Given a project brief, return ONLY valid JSON (no markdown) with this structure:
 {
   "roles": [{"role": "Role name", "count": number or 1, "responsibilities": "brief summary"}, ...],
+  "contacts": [{"role": "Role", "name": "Person", "phone": "optional", "email": "optional"}] or [],
+  "organogram": "Simple text organogram using arrows and hierarchy lines",
   "equipment": [{"item": "Equipment/plant", "quantity": number or "as required", "notes": "optional"}, ...],
   "assumptions": ["resource assumption 1", ...],
   "organisationSummary": "Short narrative on resourcing approach"

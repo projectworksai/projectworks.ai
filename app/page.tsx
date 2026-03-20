@@ -235,12 +235,12 @@ export default function Home() {
                 .join("\n\n")
             : "",
           projectOrganisationStructure: resources
-            ? [
-                resources.organisationSummary ? String(resources.organisationSummary) : "",
-                resources.roles ? `Roles: ${(resources.roles as unknown[]).map((r) => `${(r as any).role ?? ""}${(r as any).count != null ? ` (${(r as any).count})` : ""}`).join(", ")}` : "",
-              ]
-                .filter(Boolean)
-                .join("\n\n")
+            ? {
+                summary: resources.organisationSummary ? String(resources.organisationSummary) : "",
+                organogram: resources.organogram ? String(resources.organogram) : "",
+                roles: Array.isArray(resources.roles) ? resources.roles : [],
+                contacts: Array.isArray(resources.contacts) ? resources.contacts : [],
+              }
             : "",
           plantAndEquipment: plant
             ? [
@@ -277,17 +277,25 @@ export default function Home() {
                 .join("\n\n")
             : "",
           riskManagement: risk
-            ? [
-                risk.overallRiskSummary ? String(risk.overallRiskSummary) : "",
-                Array.isArray((risk as any).riskRegister)
-                  ? `Risk register: ${((risk as any).riskRegister as any[]).map((r) => `${r.id ?? ""} ${r.riskDescription ?? ""} (L${r.likelihood ?? ""}×S${r.severity ?? ""}=${r.riskScore ?? ""})`).join(" | ")}`
-                  : (Array.isArray((risk as any).risks)
-                      ? `Key risks: ${((risk as any).risks as any[]).map((r) => `${r.description ?? ""} (${r.likelihood ?? ""}/${r.impact ?? ""})`).join(" | ")}`
-                      : ""),
-                risk.contingencyNotes ? `Contingency: ${String(risk.contingencyNotes)}` : "",
-              ]
-                .filter(Boolean)
-                .join("\n\n")
+            ? {
+                overallRiskSummary: risk.overallRiskSummary ? String(risk.overallRiskSummary) : "",
+                contingencyNotes: risk.contingencyNotes ? String(risk.contingencyNotes) : "",
+                riskRegister: Array.isArray((risk as Record<string, unknown>).riskRegister)
+                  ? (risk as Record<string, unknown>).riskRegister
+                  : (Array.isArray((risk as Record<string, unknown>).risks)
+                      ? ((risk as Record<string, unknown>).risks as Array<Record<string, unknown>>).map((r, i) => ({
+                          id: `R${i + 1}`,
+                          riskDescription: String(r.description ?? ""),
+                          cause: "",
+                          impact: String(r.impact ?? ""),
+                          likelihood: String(r.likelihood ?? ""),
+                          severity: String(r.impact ?? ""),
+                          riskScore: "",
+                          mitigationStrategy: String(r.mitigation ?? ""),
+                          owner: "",
+                        }))
+                      : []),
+              }
             : "",
           safetyManagement: safety
             ? [
@@ -308,9 +316,21 @@ export default function Home() {
           constructionSchedule: schedule
             ? [
                 schedule.criticalPathNotes ? String(schedule.criticalPathNotes) : "",
-                schedule.phases ? `Phases: ${joinArr(schedule.phases)}` : "",
-                schedule.milestones ? `Milestones: ${joinArr(schedule.milestones)}` : "",
-                schedule.keyDates ? `Key dates: ${joinArr(schedule.keyDates)}` : "",
+                Array.isArray(schedule.phases)
+                  ? `Phases: ${(schedule.phases as Array<Record<string, unknown>>)
+                      .map((p) => `${String(p.name ?? "Phase")} (${String(p.durationWeeks ?? "—")}w)${p.description ? ` - ${String(p.description)}` : ""}`)
+                      .join("; ")}`
+                  : "",
+                Array.isArray(schedule.milestones)
+                  ? `Milestones: ${(schedule.milestones as Array<Record<string, unknown>>)
+                      .map((m) => `${String(m.name ?? "Milestone")} (week ${String(m.targetWeek ?? "—")})`)
+                      .join("; ")}`
+                  : "",
+                Array.isArray(schedule.keyDates)
+                  ? `Key dates: ${(schedule.keyDates as Array<Record<string, unknown>>)
+                      .map((d) => `${String(d.label ?? "Date")} (week ${String(d.week ?? "—")})`)
+                      .join("; ")}`
+                  : "",
               ]
                 .filter(Boolean)
                 .join("\n\n")
@@ -318,11 +338,18 @@ export default function Home() {
           projectReference: compliance
             ? [
                 compliance.complianceNotes ? String(compliance.complianceNotes) : "",
-                compliance.standards ? `Standards: ${joinArr(compliance.standards)}` : "",
+                Array.isArray(compliance.standards)
+                  ? `Standards: ${(compliance.standards as Array<Record<string, unknown>>)
+                      .map((s) => `${String(s.code ?? "")}${s.description ? ` - ${String(s.description)}` : ""}`)
+                      .join("; ")}`
+                  : "",
                 compliance.regulatoryRequirements ? `Regulatory: ${joinArr(compliance.regulatoryRequirements)}` : "",
               ]
                 .filter(Boolean)
                 .join("\n\n")
+            : "",
+          appendixInspectionAndTestPlan: quality && Array.isArray((quality as Record<string, unknown>).inspectionAndTest)
+            ? (quality as Record<string, unknown>).inspectionAndTest
             : "",
         } as Record<string, unknown>);
 
