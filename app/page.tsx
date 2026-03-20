@@ -10,6 +10,7 @@ import {
 } from "@/lib/parser";
 import { SECTION_DISPLAY_NAMES } from "@/lib/parser";
 import { PRO_ONLY_SECTION_KEYS } from "@/lib/tiers";
+import { detectProjectType, getDomainsByProjectType } from "@/lib/project-type";
 
 const PRO_SECTION_NAMES = PRO_ONLY_SECTION_KEYS.map(
   (k) => SECTION_DISPLAY_NAMES[k] || k
@@ -53,6 +54,7 @@ export default function Home() {
   ] as const;
   const [progressiveState, setProgressiveState] = useState<Record<string, ProgressiveStep>>({});
   const [progressiveData, setProgressiveData] = useState<Record<string, Record<string, unknown>>>({});
+  const [activeProgressiveSections, setActiveProgressiveSections] = useState<string[]>([...PROGRESSIVE_SECTIONS]);
   const [expandedProgressiveSections, setExpandedProgressiveSections] = useState<Record<string, boolean>>({});
   const [useProgressive, setUseProgressive] = useState(true);
 
@@ -93,11 +95,29 @@ export default function Home() {
     setError("");
     setData(null);
     setProgressiveData({});
+    const projectType = detectProjectType(projectPrompt);
+    const sectionsToGenerate = getDomainsByProjectType(projectType, projectPrompt).filter((s) =>
+      PROGRESSIVE_SECTIONS.includes(
+        s as
+          | "overview"
+          | "scope"
+          | "schedule"
+          | "resources"
+          | "plant-and-equipment"
+          | "construction-methodology"
+          | "procurement"
+          | "quality-management"
+          | "risk"
+          | "safety-management"
+          | "compliance"
+      )
+    );
+    setActiveProgressiveSections(sectionsToGenerate);
     const initial: Record<string, ProgressiveStep> = {};
-    PROGRESSIVE_SECTIONS.forEach((s) => (initial[s] = "pending"));
+    sectionsToGenerate.forEach((s) => (initial[s] = "pending"));
     setProgressiveState(initial);
 
-    for (const section of PROGRESSIVE_SECTIONS) {
+    for (const section of sectionsToGenerate) {
       setProgressiveState((prev) => ({ ...prev, [section]: "loading" }));
       try {
         const res = await fetch(`/api/generate/${section}`, {
@@ -311,8 +331,8 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ plan: planForExport, format: "docx" }),
       });
-      const errData = await res.json().catch(() => ({}));
       if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
         if (res.status === 402) {
           setError("Pro subscription required. Upgrade to download.");
           return;
@@ -356,8 +376,8 @@ export default function Home() {
           format: "schedule_csv",
         }),
       });
-      const errData = await res.json().catch(() => ({}));
       if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
         if (res.status === 402) {
           setError("Pro subscription required. Upgrade to download.");
           return;
@@ -477,7 +497,7 @@ export default function Home() {
 
   const mainSections = data ? getMainSectionsOnly(data) : {};
   const hasSections = Object.keys(mainSections).length > 0;
-  const hasProgressive = PROGRESSIVE_SECTIONS.some((s) => progressiveState[s] === "done" || progressiveState[s] === "loading");
+  const hasProgressive = activeProgressiveSections.some((s) => progressiveState[s] === "done" || progressiveState[s] === "loading");
   const hasOutput = hasSections || hasProgressive;
   const sectionLabels: Record<string, string> = {
     overview: "Overview",
@@ -1270,7 +1290,7 @@ export default function Home() {
             {hasProgressive && (
               <>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-                  {PROGRESSIVE_SECTIONS.map((key) => {
+                  {activeProgressiveSections.map((key) => {
                     const st = progressiveState[key];
                     const label = sectionLabels[key];
                     return (
@@ -1290,7 +1310,7 @@ export default function Home() {
                     );
                   })}
                 </div>
-                {PROGRESSIVE_SECTIONS.filter((s) => progressiveState[s] === "done").map((key) => {
+                {activeProgressiveSections.filter((s) => progressiveState[s] === "done").map((key) => {
                   const d = progressiveData[key];
                   if (!d || typeof d !== "object") return null;
                   const label = sectionLabels[key];
@@ -1308,7 +1328,9 @@ export default function Home() {
                     const summary = d.summary != null ? String(d.summary) : "";
                     const objectives = Array.isArray(d.objectives) ? d.objectives : [];
                     const budget = d.budgetEstimate != null ? String(d.budgetEstimate) : "";
+                    const budgetBreakdown = Array.isArray(d.budgetBreakdown) ? d.budgetBreakdown : [];
                     const duration = d.durationWeeks != null ? String(d.durationWeeks) : "";
+                    const scheduleBaseline = Array.isArray(d.scheduleBaseline) ? d.scheduleBaseline : [];
                     content = (
                       <>
                         {summary && <p style={{ margin: "0 0 8px 0" }}>{summary}</p>}
@@ -1316,6 +1338,32 @@ export default function Home() {
                           <>
                             <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Objectives</p>
                             <ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{objectives.map((o: unknown, i: number) => <li key={i}>{String(o)}</li>)}</ul>
+                          </>
+                        )}
+                        {budgetBreakdown.length > 0 && (
+                          <>
+                            <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Budget breakdown</p>
+                            <ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>
+                              {budgetBreakdown.slice(0, 8).map((b: Record<string, unknown>, i: number) => (
+                                <li key={i}>
+                                  {String(b.item ?? "Item")} — {String(b.amount ?? "")}
+                                  {b.basis ? ` (${String(b.basis)})` : ""}
+                                </li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
+                        {scheduleBaseline.length > 0 && (
+                          <>
+                            <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Schedule baseline</p>
+                            <ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>
+                              {scheduleBaseline.slice(0, 8).map((s: Record<string, unknown>, i: number) => (
+                                <li key={i}>
+                                  {String(s.phase ?? "Phase")} (week {String(s.startWeek ?? "—")} to {String(s.endWeek ?? "—")})
+                                  {s.notes ? ` — ${String(s.notes)}` : ""}
+                                </li>
+                              ))}
+                            </ul>
                           </>
                         )}
                         {(budget || duration) && (
@@ -1329,7 +1377,38 @@ export default function Home() {
                     );
                   } else if (key === "risk") {
                     const overall = d.overallRiskSummary != null ? String(d.overallRiskSummary) : "";
-                    const riskRegister = Array.isArray(d.riskRegister) ? d.riskRegister : [];
+                    const normalizeScale = (v: unknown): number => {
+                      if (typeof v === "number" && Number.isFinite(v)) return Math.min(5, Math.max(1, Math.round(v)));
+                      const t = String(v ?? "").trim().toLowerCase();
+                      if (!t) return 0;
+                      if (["1", "rare", "low"].includes(t)) return 1;
+                      if (["2", "unlikely"].includes(t)) return 2;
+                      if (["3", "possible", "medium", "moderate"].includes(t)) return 3;
+                      if (["4", "likely", "high"].includes(t)) return 4;
+                      if (["5", "almost certain", "very high", "critical"].includes(t)) return 5;
+                      const n = Number(t);
+                      return Number.isFinite(n) ? Math.min(5, Math.max(1, Math.round(n))) : 0;
+                    };
+                    const syntheticFromRisks = Array.isArray(d.risks)
+                      ? d.risks.slice(0, 12).map((r: Record<string, unknown>, i: number) => {
+                          const lik = normalizeScale(r.likelihood);
+                          const sev = normalizeScale(r.impact);
+                          return {
+                            id: `R${i + 1}`,
+                            riskDescription: String(r.description ?? ""),
+                            cause: "",
+                            impact: String(r.impact ?? ""),
+                            likelihood: lik || 3,
+                            severity: sev || 3,
+                            riskScore: (lik || 3) * (sev || 3),
+                            mitigationStrategy: String(r.mitigation ?? ""),
+                            owner: "",
+                          };
+                        })
+                      : [];
+                    const riskRegister = Array.isArray(d.riskRegister) && d.riskRegister.length > 0
+                      ? d.riskRegister
+                      : syntheticFromRisks;
 
                     const likelihoodLabels = ["Rare", "Unlikely", "Possible", "Likely", "Almost Certain"];
                     const severityLabels = ["Low", "Moderate", "Medium", "High", "Very High"];

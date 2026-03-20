@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { detectProjectType } from "@/lib/project-type";
 
 const MAX_RETRIES = 1;
 
@@ -9,68 +10,6 @@ function getClient(): OpenAI {
     throw new Error("AI_PROVIDER must be 'openai' and OPENAI_API_KEY must be set");
   }
   return new OpenAI({ apiKey: key });
-}
-
-type ProjectType = "construction" | "non_construction" | "hybrid";
-
-function detectProjectType(projectPrompt: string): ProjectType {
-  const t = projectPrompt.toLowerCase();
-  const constructionWords = [
-    "infrastructure",
-    "civil",
-    "building",
-    "site work",
-    "construction",
-    "drawings",
-    "boq",
-    "contractor",
-    "excavation",
-    "concrete",
-    "earthworks",
-    "pavement",
-    "road",
-    "culvert",
-    "pipeline",
-    "plant",
-    "equipment",
-    "permits",
-    "mrwa",
-    "work breakdown",
-    "wbs",
-    "swms",
-    "whs",
-    "itp",
-    "itp",
-  ];
-  const nonConstructionWords = [
-    "software",
-    "it",
-    "product",
-    "platform",
-    "saas",
-    "marketing",
-    "operations",
-    "operational",
-    "business rollout",
-    "transformation",
-    "deployment",
-    "release",
-    "agile",
-    "scrum",
-    "sprint",
-    "customer",
-    "user",
-    "crm",
-    "data migration",
-  ];
-
-  const hasConstruction = constructionWords.some((w) => t.includes(w));
-  const hasNonConstruction = nonConstructionWords.some((w) => t.includes(w));
-
-  if (hasConstruction && hasNonConstruction) return "hybrid";
-  if (hasConstruction) return "construction";
-  if (hasNonConstruction) return "non_construction";
-  return "construction";
 }
 
 export type SectionResult =
@@ -84,7 +23,9 @@ const SECTION_PROMPTS: Record<string, string> = {
   "objectives": ["objective 1", "objective 2", ...],
   "keyDeliverables": ["deliverable 1", ...],
   "budgetEstimate": "brief description or range, e.g. $1M or $800k-$1.2M",
+  "budgetBreakdown": [{"item": "Cost category", "amount": "estimated amount/range", "basis": "estimation basis"}] or [],
   "durationWeeks": number or null,
+  "scheduleBaseline": [{"phase": "phase name", "startWeek": number, "endWeek": number, "notes": "optional"}] or [],
   "keyAssumptions": ["assumption 1", ...]
 }
 Keep each field concise. durationWeeks should be a number or null.`,
