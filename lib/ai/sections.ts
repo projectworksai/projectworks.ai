@@ -11,6 +11,68 @@ function getClient(): OpenAI {
   return new OpenAI({ apiKey: key });
 }
 
+type ProjectType = "construction" | "non_construction" | "hybrid";
+
+function detectProjectType(projectPrompt: string): ProjectType {
+  const t = projectPrompt.toLowerCase();
+  const constructionWords = [
+    "infrastructure",
+    "civil",
+    "building",
+    "site work",
+    "construction",
+    "drawings",
+    "boq",
+    "contractor",
+    "excavation",
+    "concrete",
+    "earthworks",
+    "pavement",
+    "road",
+    "culvert",
+    "pipeline",
+    "plant",
+    "equipment",
+    "permits",
+    "mrwa",
+    "work breakdown",
+    "wbs",
+    "swms",
+    "whs",
+    "itp",
+    "itp",
+  ];
+  const nonConstructionWords = [
+    "software",
+    "it",
+    "product",
+    "platform",
+    "saas",
+    "marketing",
+    "operations",
+    "operational",
+    "business rollout",
+    "transformation",
+    "deployment",
+    "release",
+    "agile",
+    "scrum",
+    "sprint",
+    "customer",
+    "user",
+    "crm",
+    "data migration",
+  ];
+
+  const hasConstruction = constructionWords.some((w) => t.includes(w));
+  const hasNonConstruction = nonConstructionWords.some((w) => t.includes(w));
+
+  if (hasConstruction && hasNonConstruction) return "hybrid";
+  if (hasConstruction) return "construction";
+  if (hasNonConstruction) return "non_construction";
+  return "construction";
+}
+
 export type SectionResult =
   | { success: true; data: Record<string, unknown> }
   | { success: false; code: string; message: string };
@@ -67,14 +129,28 @@ Include main procurement categories.`,
 
   risk: `You are a project management expert. Given a project brief, return ONLY valid JSON (no markdown) with this structure:
 {
-  "risks": [
-    {"description": "risk description", "likelihood": "Low|Medium|High", "impact": "Low|Medium|High", "mitigation": "mitigation strategy"},
+  "riskRegister": [
+    {
+      "id": "R1",
+      "riskDescription": "Risk description",
+      "cause": "Primary cause / trigger",
+      "impact": "Impact if the risk occurs",
+      "likelihood": 1,
+      "severity": 1,
+      "riskScore": 1,
+      "mitigationStrategy": "Mitigation / response strategy",
+      "owner": "Owner / role responsible"
+    },
     ...
   ],
   "overallRiskSummary": "Brief narrative on key risks and approach",
   "contingencyNotes": "Optional contingency or reserve notes"
 }
-Include 5-10 risks. Use only Low, Medium, High for likelihood and impact.`,
+Constraints:
+- Include 5-10 risks.
+- likelihood and severity MUST be integers 1-5 (1 = lowest, 5 = highest).
+- riskScore MUST equal likelihood * severity.
+- Keep fields specific to the project and aligned with good construction/non-construction project practice.`,
 
   compliance: `You are a project management expert. Given a project brief, return ONLY valid JSON (no markdown) with this structure:
 {
@@ -94,9 +170,9 @@ Reference relevant Australian/industry standards where applicable.`,
   "defectsManagement": "How defects and NCRs are managed",
   "qualityRecords": ["type of record to be maintained", ...]
 }
-Focus on construction project quality management.`,
+Focus on construction project quality management (for non-construction, adapt to relevant QA/QC and acceptance processes).`,
 
-  plantAndEquipment: `You are a project management expert for construction. Given a project brief, return ONLY valid JSON (no markdown) with this structure:
+  plantAndEquipment: `You are a project management expert. Given a project brief, return ONLY valid JSON (no markdown) with this structure:
 {
   "summary": "Brief overview of plant and equipment strategy (1-2 paragraphs)",
   "equipment": [{"item": "Plant/equipment name", "quantity": number or "as required", "use": "brief use or phase", "notes": "optional"}],
@@ -104,9 +180,9 @@ Focus on construction project quality management.`,
   "maintenanceAndAvailability": "How maintenance and availability are ensured",
   "assumptions": ["assumption 1", ...]
 }
-Be specific to construction plant and equipment.`,
+Be specific to the project. If the project is non-construction, treat this section as tools/platforms/infrastructure/resources (still use the same JSON fields). If hybrid, include both.`,
 
-  constructionMethodology: `You are a project management expert for construction. Given a project brief, return ONLY valid JSON (no markdown) with this structure:
+  constructionMethodology: `You are a project management expert. Given a project brief, return ONLY valid JSON (no markdown) with this structure:
 {
   "summary": "Executive summary of construction methodology (2-3 paragraphs)",
   "sequence": ["Step 1: description", "Step 2: description", ...],
@@ -115,9 +191,9 @@ Be specific to construction plant and equipment.`,
   "interfaces": "Description of interfaces with existing assets, utilities, or other contractors",
   "constraints": ["constraint 1", ...]
 }
-Describe construction method statement / methodology.`,
+Describe delivery methodology. If non-construction, adapt as delivery approach (agile/waterfall/hybrid) while preserving the JSON schema. If hybrid, combine both.`,
 
-  safetyManagement: `You are a project management expert for construction. Given a project brief, return ONLY valid JSON (no markdown) with this structure:
+  safetyManagement: `You are a project management expert. Given a project brief, return ONLY valid JSON (no markdown) with this structure:
 {
   "summary": "Brief overview of safety management approach (1-2 paragraphs)",
   "objectives": ["safety objective 1", ...],
@@ -126,7 +202,9 @@ Describe construction method statement / methodology.`,
   "trainingAndInduction": "Training and induction requirements",
   "emergencyProcedures": "Brief emergency and incident response"
 }
-Focus on construction WHS/safety.`,
+For construction projects: provide WHS/safety management (hazards, controls, SWMS/high-risk activities, training/induction, emergency procedures).
+For non-construction projects: treat this as operational risk/incident management (operational hazards, controls, high-risk activities, readiness training, incident response).
+For hybrid: include both.`,
 };
 
 function parseJsonFromContent(content: string): Record<string, unknown> | null {
@@ -151,7 +229,40 @@ export async function generateSection(
   section: SectionKey,
   projectPrompt: string
 ): Promise<SectionResult> {
-  const systemPrompt = SECTION_PROMPTS[section];
+  const projectType = detectProjectType(projectPrompt);
+  const adaptiveRules =
+    projectType === "construction"
+      ? `PROJECT_TYPE=construction. Provide construction-focused domain depth: plant/equipment logistics, method statements, WHS safety, and construction-grade risk responses.`
+      : projectType === "non_construction"
+        ? `PROJECT_TYPE=non_construction. Adapt domains: treat plant/equipment as tools/platforms/infrastructure; treat construction methodology as delivery approach; treat safety management as operational incident readiness. Focus risks on delivery/operations.`
+        : `PROJECT_TYPE=hybrid. Combine construction and non-construction domains. Include both WHS-style safety and operational incident readiness where relevant.`;
+
+  const frameworkAlignment =
+    section === "overview"
+      ? `FRAMEWORKS: PMBOK Integration/Initiating (Business case) and PRINCE2 Business Case theme.`
+      : section === "scope"
+        ? `FRAMEWORKS: PMBOK Scope/Requirements and PRINCE2 Plans.`
+        : section === "schedule"
+          ? `FRAMEWORKS: PMBOK Schedule/Timeline and PRINCE2 Plans.`
+          : section === "resources"
+            ? `FRAMEWORKS: PMBOK Resource/Team management and PRINCE2 Organization.`
+            : section === "plantAndEquipment"
+              ? `FRAMEWORKS: Project environment & capability (logistics/resources). For non-construction, map to required tools/platforms.`
+              : section === "constructionMethodology"
+                ? `FRAMEWORKS: PMBOK Execution approach and PRINCE2 Delivery approach.`
+                : section === "qualityManagement"
+                  ? `FRAMEWORKS: PMBOK Quality management and PRINCE2 Quality theme.`
+                  : section === "procurement"
+                    ? `FRAMEWORKS: PMBOK Procurement/Commercial strategy and PRINCE2 Commercial considerations.`
+                    : section === "risk"
+                      ? `FRAMEWORKS: PMBOK Risk management and PRINCE2 Risk theme.`
+                      : section === "safetyManagement"
+                        ? `FRAMEWORKS: Construction WHS or operational incident readiness, consistent with risk controls.`
+                        : section === "compliance"
+                          ? `FRAMEWORKS: PMBOK Governance controls and PRINCE2 Progress/Business governance themes.`
+                          : `FRAMEWORKS: Align this section with relevant PMBOK/PRINCE2 themes.`;
+
+  const systemPrompt = `${SECTION_PROMPTS[section]}\n\n${adaptiveRules}\n${frameworkAlignment}\n\nReturn ONLY valid JSON that matches the exact schema for this section. No markdown.`;
   if (!systemPrompt) {
     return { success: false, code: "INVALID_SECTION", message: `Unknown section: ${section}` };
   }

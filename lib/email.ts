@@ -22,7 +22,10 @@ function getSmtpConfig() {
 
 function getResendConfig() {
   const apiKey = process.env.RESEND_API_KEY;
-  const from = process.env.RESEND_FROM || process.env.SMTP_FROM;
+  const from =
+    process.env.RESEND_FROM ||
+    process.env.EMAIL_FROM ||
+    process.env.SMTP_FROM;
   if (!apiKey || !from) return null;
   return { apiKey, from };
 }

@@ -171,14 +171,145 @@ export default function Home() {
   );
 
   const downloadWord = useCallback(async () => {
-    if (!data) return;
     setDownloading(true);
     setError("");
     try {
+      const joinArr = (arr: unknown): string => {
+        if (!Array.isArray(arr)) return "";
+        return arr.map((x) => String(x)).join("; ");
+      };
+      const overview = progressiveData.overview as Record<string, unknown> | undefined;
+      const scope = progressiveData.scope as Record<string, unknown> | undefined;
+      const schedule = progressiveData.schedule as Record<string, unknown> | undefined;
+      const resources = progressiveData.resources as Record<string, unknown> | undefined;
+      const plant = progressiveData["plant-and-equipment"] as Record<string, unknown> | undefined;
+      const methodology = progressiveData["construction-methodology"] as Record<string, unknown> | undefined;
+      const quality = progressiveData["quality-management"] as Record<string, unknown> | undefined;
+      const risk = progressiveData.risk as Record<string, unknown> | undefined;
+      const safety = progressiveData["safety-management"] as Record<string, unknown> | undefined;
+      const compliance = progressiveData.compliance as Record<string, unknown> | undefined;
+
+      const planForExport: Record<string, unknown> =
+        data ??
+        ({
+          index: "",
+          background: overview
+            ? [
+                overview.summary ? String(overview.summary) : "",
+                overview.keyDeliverables ? `Key deliverables: ${joinArr(overview.keyDeliverables)}` : "",
+                overview.durationWeeks != null ? `Duration: ${String(overview.durationWeeks)} weeks` : "",
+                overview.keyAssumptions ? `Key assumptions: ${joinArr(overview.keyAssumptions)}` : "",
+              ]
+                .filter(Boolean)
+                .join("\n\n")
+            : "",
+          scope: scope
+            ? [
+                scope.scopeOfWork ? String(scope.scopeOfWork) : "",
+                scope.inclusions ? `Inclusions: ${joinArr(scope.inclusions)}` : "",
+                scope.exclusions ? `Exclusions: ${joinArr(scope.exclusions)}` : "",
+                scope.boundaries ? `Boundaries: ${String(scope.boundaries)}` : "",
+                scope.acceptanceCriteria ? `Acceptance criteria: ${joinArr(scope.acceptanceCriteria)}` : "",
+              ]
+                .filter(Boolean)
+                .join("\n\n")
+            : "",
+          projectOrganisationStructure: resources
+            ? [
+                resources.organisationSummary ? String(resources.organisationSummary) : "",
+                resources.roles ? `Roles: ${(resources.roles as unknown[]).map((r) => `${(r as any).role ?? ""}${(r as any).count != null ? ` (${(r as any).count})` : ""}`).join(", ")}` : "",
+              ]
+                .filter(Boolean)
+                .join("\n\n")
+            : "",
+          plantAndEquipment: plant
+            ? [
+                plant.summary ? String(plant.summary) : "",
+                plant.majorPlant ? `Major plant: ${joinArr(plant.majorPlant)}` : "",
+                plant.equipment ? `Equipment: ${(plant.equipment as unknown[]).map((e) => `${(e as any).item ?? ""}${(e as any).quantity != null ? ` (${(e as any).quantity})` : ""}${(e as any).use ? ` — ${(e as any).use}` : ""}`).join(", ")}` : "",
+                plant.maintenanceAndAvailability ? `Maintenance & availability: ${String(plant.maintenanceAndAvailability)}` : "",
+              ]
+                .filter(Boolean)
+                .join("\n\n")
+            : "",
+          constructionMethodStatement: methodology
+            ? [
+                methodology.summary ? String(methodology.summary) : "",
+                methodology.sequence ? `Sequence: ${joinArr(methodology.sequence)}` : "",
+                methodology.keyMethods ? `Key methods: ${(methodology.keyMethods as unknown[]).map((m) => `${(m as any).activity ?? ""} — ${(m as any).method ?? ""}`).join(", ")}` : "",
+                methodology.temporaryWorks ? `Temporary works: ${joinArr(methodology.temporaryWorks)}` : "",
+                methodology.interfaces ? `Interfaces: ${String(methodology.interfaces)}` : "",
+                methodology.constraints ? `Constraints: ${joinArr(methodology.constraints)}` : "",
+              ]
+                .filter(Boolean)
+                .join("\n\n")
+            : "",
+          qualityManagement: quality
+            ? [
+                quality.summary ? String(quality.summary) : "",
+                quality.objectives ? `Objectives: ${joinArr(quality.objectives)}` : "",
+                quality.standards ? `Standards: ${joinArr(quality.standards)}` : "",
+                quality.inspectionAndTest ? `Inspection & test: ${joinArr(quality.inspectionAndTest)}` : "",
+                quality.defectsManagement ? `Defects management: ${String(quality.defectsManagement)}` : "",
+                quality.qualityRecords ? `Quality records: ${joinArr(quality.qualityRecords)}` : "",
+              ]
+                .filter(Boolean)
+                .join("\n\n")
+            : "",
+          riskManagement: risk
+            ? [
+                risk.overallRiskSummary ? String(risk.overallRiskSummary) : "",
+                Array.isArray((risk as any).riskRegister)
+                  ? `Risk register: ${((risk as any).riskRegister as any[]).map((r) => `${r.id ?? ""} ${r.riskDescription ?? ""} (L${r.likelihood ?? ""}×S${r.severity ?? ""}=${r.riskScore ?? ""})`).join(" | ")}`
+                  : (Array.isArray((risk as any).risks)
+                      ? `Key risks: ${((risk as any).risks as any[]).map((r) => `${r.description ?? ""} (${r.likelihood ?? ""}/${r.impact ?? ""})`).join(" | ")}`
+                      : ""),
+                risk.contingencyNotes ? `Contingency: ${String(risk.contingencyNotes)}` : "",
+              ]
+                .filter(Boolean)
+                .join("\n\n")
+            : "",
+          safetyManagement: safety
+            ? [
+                safety.summary ? String(safety.summary) : "",
+                safety.objectives ? `Objectives: ${joinArr(safety.objectives)}` : "",
+                Array.isArray((safety as any).hazards)
+                  ? `Hazards & controls: ${((safety as any).hazards as any[])
+                      .map((h) => `${h.hazard ?? ""}${h.control ? ` — ${h.control}` : ""}`)
+                      .join(" | ")}`
+                  : "",
+                Array.isArray((safety as any).swms) ? `SWMS/high-risk: ${joinArr((safety as any).swms)}` : "",
+                safety.trainingAndInduction ? `Training & induction: ${String(safety.trainingAndInduction)}` : "",
+                safety.emergencyProcedures ? `Emergency procedures: ${String(safety.emergencyProcedures)}` : "",
+              ]
+                .filter(Boolean)
+                .join("\n\n")
+            : "",
+          constructionSchedule: schedule
+            ? [
+                schedule.criticalPathNotes ? String(schedule.criticalPathNotes) : "",
+                schedule.phases ? `Phases: ${joinArr(schedule.phases)}` : "",
+                schedule.milestones ? `Milestones: ${joinArr(schedule.milestones)}` : "",
+                schedule.keyDates ? `Key dates: ${joinArr(schedule.keyDates)}` : "",
+              ]
+                .filter(Boolean)
+                .join("\n\n")
+            : "",
+          projectReference: compliance
+            ? [
+                compliance.complianceNotes ? String(compliance.complianceNotes) : "",
+                compliance.standards ? `Standards: ${joinArr(compliance.standards)}` : "",
+                compliance.regulatoryRequirements ? `Regulatory: ${joinArr(compliance.regulatoryRequirements)}` : "",
+              ]
+                .filter(Boolean)
+                .join("\n\n")
+            : "",
+        } as Record<string, unknown>);
+
       const res = await fetch("/api/export", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: data, format: "docx" }),
+        body: JSON.stringify({ plan: planForExport, format: "docx" }),
       });
       const errData = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -200,7 +331,7 @@ export default function Home() {
     } finally {
       setDownloading(false);
     }
-  }, [data, projectName]);
+  }, [data, projectName, progressiveData]);
 
   const schedulePlanForExport = data ?? (progressiveData.schedule && Array.isArray(progressiveData.schedule.tasks) && (progressiveData.schedule.tasks as unknown[]).length > 0
     ? { schedule: progressiveData.schedule.tasks }
@@ -347,6 +478,7 @@ export default function Home() {
   const mainSections = data ? getMainSectionsOnly(data) : {};
   const hasSections = Object.keys(mainSections).length > 0;
   const hasProgressive = PROGRESSIVE_SECTIONS.some((s) => progressiveState[s] === "done" || progressiveState[s] === "loading");
+  const hasOutput = hasSections || hasProgressive;
   const sectionLabels: Record<string, string> = {
     overview: "Overview",
     scope: "Scope",
@@ -946,7 +1078,7 @@ export default function Home() {
             <h2 style={{ fontSize: "1rem", fontWeight: 600, color: "#0f172a", margin: 0 }}>
               Output
             </h2>
-            {hasSections && isPro && (
+            {hasOutput && isPro && (
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 {isPro ? (
                   <>
@@ -1195,17 +1327,105 @@ export default function Home() {
                         )}
                       </>
                     );
-                  } else if (key === "risk" && Array.isArray(d.risks)) {
+                  } else if (key === "risk") {
+                    const overall = d.overallRiskSummary != null ? String(d.overallRiskSummary) : "";
+                    const riskRegister = Array.isArray(d.riskRegister) ? d.riskRegister : [];
+
+                    const likelihoodLabels = ["Rare", "Unlikely", "Possible", "Likely", "Almost Certain"];
+                    const severityLabels = ["Low", "Moderate", "Medium", "High", "Very High"];
+
+                    const counts: number[][] = Array.from({ length: 5 }, () => Array.from({ length: 5 }, () => 0));
+                    if (riskRegister.length > 0) {
+                      for (const r of riskRegister as Array<Record<string, unknown>>) {
+                        const lik = typeof r.likelihood === "number" ? r.likelihood : Number(r.likelihood);
+                        const sev = typeof r.severity === "number" ? r.severity : Number(r.severity);
+                        const likIdx = Number.isFinite(lik) ? lik - 1 : -1;
+                        const sevIdx = Number.isFinite(sev) ? sev - 1 : -1;
+                        if (likIdx >= 0 && likIdx < 5 && sevIdx >= 0 && sevIdx < 5) counts[sevIdx][likIdx] += 1;
+                      }
+                    }
+
                     content = (
                       <>
-                        {(d.overallRiskSummary as string) && <p style={{ margin: "0 0 8px 0" }}>{String(d.overallRiskSummary)}</p>}
-                        <ul style={{ margin: 0, paddingLeft: 18 }}>
-                          {d.risks.slice(0, 10).map((r: Record<string, unknown>, i: number) => (
-                            <li key={i} style={{ marginBottom: 4 }}>
-                              {r.description as string} — {r.likelihood as string}/{r.impact as string}. Mitigation: {r.mitigation as string}
-                            </li>
-                          ))}
-                        </ul>
+                        {overall && <p style={{ margin: "0 0 8px 0" }}>{overall}</p>}
+
+                        {riskRegister.length > 0 && (
+                          <>
+                            <p style={{ margin: "0 0 6px 0", fontWeight: 600 }}>Risk matrix (5×5)</p>
+                            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                              <thead>
+                                <tr>
+                                  <th style={{ textAlign: "left", padding: "6px 6px", borderBottom: "1px solid #e2e8f0", color: "#475569", width: 90 }}>Severity \\ Likelihood</th>
+                                  {likelihoodLabels.map((lab, i) => (
+                                    <th key={i} style={{ padding: "6px 6px", borderBottom: "1px solid #e2e8f0", color: "#475569" }}>
+                                      {i + 1}
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {severityLabels.map((sevLab, sevIdx) => (
+                                  <tr key={sevIdx}>
+                                    <td style={{ padding: "6px 6px", borderBottom: "1px solid #f1f5f9", color: "#64748b", fontWeight: 600 }}>{sevIdx + 1}</td>
+                                    {likelihoodLabels.map((_, likIdx) => {
+                                      const n = counts[sevIdx][likIdx] || 0;
+                                      const intensity = sevIdx * 5 + likIdx;
+                                      const bg = n === 0 ? "#ffffff" : intensity < 8 ? "#fef3c7" : intensity < 15 ? "#fde68a" : "#fca5a5";
+                                      return (
+                                        <td key={likIdx} style={{ padding: "6px 6px", borderBottom: "1px solid #f1f5f9", textAlign: "center", background: bg, color: n === 0 ? "#94a3b8" : "#0f172a", fontWeight: 700 }}>
+                                          {n || "—"}
+                                        </td>
+                                      );
+                                    })}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+
+                            <p style={{ margin: "10px 0 6px 0", fontWeight: 600 }}>Risk register</p>
+                            <div style={{ overflowX: "auto" }}>
+                              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+                                <thead>
+                                  <tr>
+                                    {["ID", "Risk", "Cause", "Impact", "L", "S", "Score", "Mitigation", "Owner"].map((h, i) => (
+                                      <th key={i} style={{ textAlign: "left", padding: "6px 6px", borderBottom: "1px solid #e2e8f0", color: "#475569" }}>
+                                        {h}
+                                      </th>
+                                    ))}
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {(riskRegister as Array<Record<string, unknown>>).slice(0, 12).map((r, i) => (
+                                    <tr key={i}>
+                                      <td style={{ padding: "6px 6px", borderBottom: "1px solid #f1f5f9", color: "#0f172a", fontWeight: 700 }}>{String(r.id ?? `R${i + 1}`)}</td>
+                                      <td style={{ padding: "6px 6px", borderBottom: "1px solid #f1f5f9" }}>{String(r.riskDescription ?? "")}</td>
+                                      <td style={{ padding: "6px 6px", borderBottom: "1px solid #f1f5f9" }}>{String(r.cause ?? "")}</td>
+                                      <td style={{ padding: "6px 6px", borderBottom: "1px solid #f1f5f9" }}>{String(r.impact ?? "")}</td>
+                                      <td style={{ padding: "6px 6px", borderBottom: "1px solid #f1f5f9", width: 28 }}>{String(r.likelihood ?? "—")}</td>
+                                      <td style={{ padding: "6px 6px", borderBottom: "1px solid #f1f5f9", width: 28 }}>{String(r.severity ?? "—")}</td>
+                                      <td style={{ padding: "6px 6px", borderBottom: "1px solid #f1f5f9", width: 48 }}>{String(r.riskScore ?? "—")}</td>
+                                      <td style={{ padding: "6px 6px", borderBottom: "1px solid #f1f5f9" }}>{String(r.mitigationStrategy ?? "")}</td>
+                                      <td style={{ padding: "6px 6px", borderBottom: "1px solid #f1f5f9" }}>{String(r.owner ?? "")}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </>
+                        )}
+
+                        {riskRegister.length === 0 && Array.isArray(d.risks) && (
+                          <>
+                            <p style={{ margin: "0 0 6px 0", fontWeight: 600 }}>Key risks</p>
+                            <ul style={{ margin: 0, paddingLeft: 18 }}>
+                              {d.risks.slice(0, 10).map((r: Record<string, unknown>, i: number) => (
+                                <li key={i} style={{ marginBottom: 4 }}>
+                                  {r.description as string} — {r.likelihood as string}/{r.impact as string}. Mitigation: {r.mitigation as string}
+                                </li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
                       </>
                     );
                   } else if (key === "scope") {
