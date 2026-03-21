@@ -278,7 +278,13 @@ export default function Home() {
                 summary: resources.organisationSummary ? String(resources.organisationSummary) : "",
                 organogram: resources.organogram ? String(resources.organogram) : "",
                 roles: Array.isArray(resources.roles) ? resources.roles : [],
-                contacts: Array.isArray(resources.contacts) ? resources.contacts : [],
+                contacts: Array.isArray(resources.contacts)
+                  ? (resources.contacts as Array<Record<string, unknown>>).map((c) => ({
+                      ...c,
+                      phone: "",
+                      email: "",
+                    }))
+                  : [],
               }
             : "",
           plantAndEquipment: plant
@@ -1950,7 +1956,15 @@ export default function Home() {
                       <>
                         {summary && <p style={{ margin: "0 0 8px 0" }}>{summary}</p>}
                         {objectives.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Objectives</p><ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{objectives.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul></>)}
-                        {hazards.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Hazards &amp; controls</p><ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{hazards.map((h: Record<string, unknown>, i: number) => <li key={i}>{String(h.hazard)} — {String(h.control ?? "")}</li>)}</ul></>)}
+                        {hazards.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Hazards &amp; controls</p><ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{hazards.map((h: Record<string, unknown>, i: number) => {
+                          const lead = h.primaryAccountableRole ?? h.responsiblePersonRole ?? h.responsiblePerson ?? "";
+                          return (
+                            <li key={i}>
+                              {String(h.hazard)} — {String(h.control ?? "")}
+                              {lead ? <span style={{ color: "#475569" }}> (primary: {String(lead)})</span> : null}
+                            </li>
+                          );
+                        })}</ul><p style={{ margin: "0 0 8px 0", fontSize: 12, color: "#64748b" }}>WHS is everyone&apos;s responsibility; &quot;primary&quot; is the coordination lead for that hazard.</p></>)}
                         {swms.length > 0 && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>SWMS / high-risk</p><ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>{swms.map((x: unknown, i: number) => <li key={i}>{String(x)}</li>)}</ul></>)}
                         {training && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Training &amp; induction</p><p style={{ margin: "0 0 8px 0" }}>{training}</p></>)}
                         {emergency && (<><p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Emergency procedures</p><p style={{ margin: 0 }}>{emergency}</p></>)}

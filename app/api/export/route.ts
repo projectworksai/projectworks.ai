@@ -11,6 +11,8 @@ import {
   TableCell,
   TableRow,
   TextRun,
+  TableLayoutType,
+  WidthType,
   convertInchesToTwip,
 } from "docx";
 import {
@@ -24,6 +26,25 @@ import {
 const SPACE_AFTER_PARAGRAPH = 200;
 const SPACE_AFTER_HEADING = 280;
 const SPACE_BEFORE_HEADING = 240;
+
+/** Full content width between 1" margins on Letter/A4 — avoids docx default 100-twip columns (broken on Word mobile). */
+const TABLE_CONTENT_DXA = convertInchesToTwip(6.35);
+
+function tableGridFromRatios(ratios: readonly number[]): {
+  layout: (typeof TableLayoutType)[keyof typeof TableLayoutType];
+  columnWidths: number[];
+  width: { size: number; type: (typeof WidthType)[keyof typeof WidthType] };
+} {
+  const sumR = ratios.reduce((a, b) => a + b, 0);
+  const widths = ratios.map((r) => Math.floor((TABLE_CONTENT_DXA * r) / sumR));
+  const drift = TABLE_CONTENT_DXA - widths.reduce((a, b) => a + b, 0);
+  widths[widths.length - 1] += drift;
+  return {
+    layout: TableLayoutType.FIXED,
+    columnWidths: widths,
+    width: { size: TABLE_CONTENT_DXA, type: WidthType.DXA },
+  };
+}
 
 type PlanPayload = Record<string, unknown>;
 
@@ -223,39 +244,132 @@ function buildRiskMatrixCsv(plan: PlanPayload): string {
   return rows.join("\r\n");
 }
 
-function smartArtOrganogramParagraphs(organogram: string): Paragraph[] {
-  const chains = organogram
+function parseOrganogramChains(organogram: string): string[][] {
+  return organogram
     .split(/[;\n]/)
     .map((s) => s.trim())
-    .filter(Boolean);
+    .filter(Boolean)
+    .map((chain) =>
+      chain
+        .split(/->|→/)
+        .map((p) => p.trim())
+        .filter(Boolean)
+    )
+    .filter((parts) => parts.length > 0);
+}
+
+function buildOrganogramChildrenMap(chains: string[][]): Map<string, string[]> {
+  const children = new Map<string, string[]>();
+  const seenEdge = new Set<string>();
+  for (const parts of chains) {
+    for (let i = 0; i < parts.length - 1; i++) {
+      const parent = parts[i];
+      const child = parts[i + 1];
+      const key = `${parent}>>${child}`;
+      if (seenEdge.has(key)) continue;
+      seenEdge.add(key);
+      if (!children.has(parent)) children.set(parent, []);
+      children.get(parent)!.push(child);
+    }
+  }
+  return children;
+}
+
+function findOrganogramRoots(chains: string[][]): string[] {
+  const all = new Set<string>();
+  const asChild = new Set<string>();
+  for (const parts of chains) {
+    parts.forEach((p) => all.add(p));
+    for (let i = 1; i < parts.length; i++) asChild.add(parts[i]);
+  }
+  return [...all].filter((n) => !asChild.has(n));
+}
+
+/** Hierarchical bullets (SmartArt-ready in Word desktop: Convert to SmartArt → Hierarchy). */
+function organogramHierarchyParagraphs(organogram: string): Paragraph[] {
+  const chains = parseOrganogramChains(organogram);
   if (chains.length === 0) return bodyParagraphs(organogram);
+
+  const childrenMap = buildOrganogramChildrenMap(chains);
+  const roots = findOrganogramRoots(chains);
+  const indentStep = convertInchesToTwip(0.28);
 
   const paragraphs: Paragraph[] = [
     new Paragraph({
-      children: [new TextRun({ text: "Hierarchy (role-based)", font: "Calibri", size: 22, bold: true })],
-      spacing: { after: 100 },
+      children: [
+        new TextRun({
+          text: "Organisation hierarchy (SmartArt-style). In Word for desktop: select the lines below → Home → Convert to SmartArt → Hierarchy.",
+          font: "Calibri",
+          size: 20,
+          italics: true,
+        }),
+      ],
+      spacing: { after: 140 },
     }),
   ];
-  for (const chain of chains.slice(0, 20)) {
-    const parts = chain
-      .split("->")
-      .map((p) => p.trim())
-      .filter(Boolean);
-    if (parts.length === 0) continue;
+
+  function dfs(node: string, depth: number, path: string[]) {
+    if (path.includes(node)) return;
+    const nextPath = [...path, node];
     paragraphs.push(
       new Paragraph({
+        indent: { left: depth * indentStep },
         children: [
           new TextRun({
-            text: parts.join("  ->  "),
+            text: `${depth > 0 ? "• " : ""}${node}`,
             font: "Calibri",
             size: 22,
+            bold: depth === 0,
           }),
         ],
-        spacing: { after: 80 },
+        spacing: { after: 40 },
       })
     );
+    for (const child of childrenMap.get(node) ?? []) dfs(child, depth + 1, nextPath);
   }
+
+  if (roots.length === 0) {
+    const parts = chains[0];
+    parts.forEach((p, i) => {
+      paragraphs.push(
+        new Paragraph({
+          indent: { left: i * indentStep },
+          children: [
+            new TextRun({
+              text: `${i > 0 ? "• " : ""}${p}`,
+              font: "Calibri",
+              size: 22,
+              bold: i === 0,
+            }),
+          ],
+          spacing: { after: 40 },
+        })
+      );
+    });
+  } else {
+    for (const r of roots) dfs(r, 0, []);
+  }
+
   return paragraphs;
+}
+
+const SAFETY_PRIMARY_ROLES = [
+  "Project Manager",
+  "Project Engineer",
+  "Site Supervisor",
+  "Plant / Equipment Operator",
+] as const;
+
+function resolveSafetyAccountableRole(h: Record<string, unknown>, rowIndex: number): string {
+  const raw = String(
+    h.primaryAccountableRole ??
+      h.responsiblePersonRole ??
+      h.responsiblePerson ??
+      h.owner ??
+      ""
+  ).trim();
+  if (raw) return raw;
+  return SAFETY_PRIMARY_ROLES[rowIndex % SAFETY_PRIMARY_ROLES.length];
 }
 
 async function buildDocx(plan: PlanPayload): Promise<Buffer> {
@@ -281,6 +395,7 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
   if (projectName || clientName || contractorName) {
     children.push(
       new Table({
+        ...tableGridFromRatios([1, 2.2]),
         rows: [
           new TableRow({
             children: [
@@ -319,7 +434,6 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
             ],
           }),
         ],
-        width: { size: 100, type: "pct" },
       })
     );
   }
@@ -403,8 +517,8 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
       ];
       children.push(
         new Table({
+          ...tableGridFromRatios([0.14, 0.62, 0.14]),
           rows: tableRows,
-          width: { size: 100, type: "pct" },
         })
       );
     } else if (key === "projectOrganisationStructure" && value && typeof value === "object" && !Array.isArray(value)) {
@@ -421,7 +535,7 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
             children: [new TextRun({ text: "Organogram", font: "Calibri", size: 22, bold: true })],
             spacing: { after: 120 },
           }),
-          ...smartArtOrganogramParagraphs(organogram)
+          ...organogramHierarchyParagraphs(organogram)
         );
       }
       if (roles.length > 0) {
@@ -431,6 +545,7 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
             spacing: { after: 120 },
           }),
           new Table({
+            ...tableGridFromRatios([0.9, 0.14, 1.5]),
             rows: [
               new TableRow({
                 children: ["Role", "Count", "Responsibilities"].map((h) =>
@@ -450,7 +565,6 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
                 });
               }),
             ],
-            width: { size: 100, type: "pct" },
           })
         );
       }
@@ -461,6 +575,7 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
             spacing: { before: 180, after: 120 },
           }),
           new Table({
+            ...tableGridFromRatios([0.45, 0.275, 0.275]),
             rows: [
               new TableRow({
                 children: ["Role", "Phone", "Email"].map((h) =>
@@ -474,13 +589,12 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
                 return new TableRow({
                   children: [
                     new TableCell({ children: [new Paragraph(String(row.role ?? ""))] }),
-                    new TableCell({ children: [new Paragraph(String(row.phone ?? ""))] }),
-                    new TableCell({ children: [new Paragraph(String(row.email ?? ""))] }),
+                    new TableCell({ children: [new Paragraph("")] }),
+                    new TableCell({ children: [new Paragraph("")] }),
                   ],
                 });
               }),
             ],
-            width: { size: 100, type: "pct" },
           })
         );
       }
@@ -497,6 +611,7 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
             spacing: { after: 120 },
           }),
           new Table({
+            ...tableGridFromRatios([1.05, 0.95, 0.35, 0.85]),
             rows: [
               new TableRow({
                 children: ["Description", "Capacity", "Quantity", "Use/Notes"].map((h) =>
@@ -516,7 +631,6 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
                 })
               ),
             ],
-            width: { size: 100, type: "pct" },
           })
         );
       }
@@ -533,6 +647,7 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
             spacing: { after: 120 },
           }),
           new Table({
+            ...tableGridFromRatios([0.22, 0.42, 0.2, 0.36]),
             rows: [
               new TableRow({
                 children: ["WBS", "Task", "Phase", "Timeframe"].map((h) =>
@@ -558,7 +673,6 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
                 });
               }),
             ],
-            width: { size: 100, type: "pct" },
           })
         );
       } else {
@@ -576,26 +690,37 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
             spacing: { after: 120 },
           }),
           new Table({
+            ...tableGridFromRatios([0.95, 1.15, 0.75]),
             rows: [
               new TableRow({
-                children: ["Hazard", "Control", "Responsible Person/Role"].map((h) =>
+                children: ["Hazard", "Control", "Primary accountable role"].map((h) =>
                   new TableCell({
                     children: [new Paragraph({ children: [new TextRun({ text: h, font: "Calibri", size: 21, bold: true })] })],
                   })
                 ),
               }),
-              ...hazards.slice(0, 40).map((h) => {
-                const owner = String(h.responsiblePerson ?? h.owner ?? h.role ?? "Safety Manager");
+              ...hazards.slice(0, 40).map((h, idx) => {
+                const accountable = resolveSafetyAccountableRole(h, idx);
                 return new TableRow({
                   children: [
                     new TableCell({ children: [new Paragraph(String(h.hazard ?? ""))] }),
                     new TableCell({ children: [new Paragraph(String(h.control ?? ""))] }),
-                    new TableCell({ children: [new Paragraph(owner)] }),
+                    new TableCell({ children: [new Paragraph(accountable)] }),
                   ],
                 });
               }),
             ],
-            width: { size: 100, type: "pct" },
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "Note: WHS is the responsibility of all personnel (including PM, PE, supervisors, and operators). The column above identifies the primary coordination role for each hazard.",
+                font: "Calibri",
+                size: 20,
+                italics: true,
+              }),
+            ],
+            spacing: { before: 120, after: 80 },
           })
         );
       }
@@ -633,6 +758,7 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
             spacing: { before: 180, after: 120 },
           }),
           new Table({
+            ...tableGridFromRatios([1.15, 1, 1, 1, 1, 1]),
             rows: [
               new TableRow({
                 children: [
@@ -669,13 +795,13 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
                 })
               ),
             ],
-            width: { size: 100, type: "pct" },
           }),
           new Paragraph({
             children: [new TextRun({ text: "Risk Register", font: "Calibri", size: 22, bold: true })],
             spacing: { before: 220, after: 120 },
           }),
           new Table({
+            ...tableGridFromRatios([0.32, 0.9, 0.62, 0.62, 0.22, 0.22, 0.28, 1.05, 0.82]),
             rows: [
               new TableRow({
                 children: ["ID", "Risk", "Cause", "Impact", "L", "S", "Score", "Mitigation", "Owner"].map((h) =>
@@ -706,7 +832,6 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
                 });
               }),
             ],
-            width: { size: 100, type: "pct" },
           })
         );
       } else {
@@ -760,6 +885,7 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
     if (key === "appendixInspectionAndTestPlan" && Array.isArray(value) && value.length > 0) {
       children.push(
         new Table({
+          ...tableGridFromRatios([0.12, 0.88]),
           rows: [
             new TableRow({
               children: ["No.", "Inspection/Test Item"].map((h) =>
@@ -777,7 +903,6 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
               })
             ),
           ],
-          width: { size: 100, type: "pct" },
         })
       );
     } else if (key === "appendixRiskMatrix" && Array.isArray(value) && value.length > 0) {
@@ -802,6 +927,7 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
           spacing: { after: 120 },
         }),
         new Table({
+          ...tableGridFromRatios([1.15, 1, 1, 1, 1, 1]),
           rows: [
             new TableRow({
               children: [
@@ -838,13 +964,13 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
               })
             ),
           ],
-          width: { size: 100, type: "pct" },
         }),
         new Paragraph({
           children: [new TextRun({ text: "Risk Register", font: "Calibri", size: 22, bold: true })],
           spacing: { before: 220, after: 120 },
         }),
         new Table({
+          ...tableGridFromRatios([0.32, 0.9, 0.62, 0.62, 0.22, 0.22, 0.28, 1.05, 0.82]),
           rows: [
             new TableRow({
               children: ["ID", "Risk", "Cause", "Impact", "L", "S", "Score", "Mitigation", "Owner"].map((h) =>
@@ -875,7 +1001,6 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
               });
             }),
           ],
-          width: { size: 100, type: "pct" },
         })
       );
     } else if (
@@ -896,6 +1021,7 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
             spacing: { after: 100 },
           }),
           new Table({
+            ...tableGridFromRatios([0.38, 0.18, 1.1]),
             rows: [
               new TableRow({
                 children: ["Phase", "Duration (weeks)", "Description"].map((h) =>
@@ -914,7 +1040,6 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
                 })
               ),
             ],
-            width: { size: 100, type: "pct" },
           })
         );
       }
@@ -925,6 +1050,7 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
             spacing: { before: 160, after: 100 },
           }),
           new Table({
+            ...tableGridFromRatios([0.42, 0.2, 0.95]),
             rows: [
               new TableRow({
                 children: ["Milestone", "Target Week", "Deliverable"].map((h) =>
@@ -943,7 +1069,6 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
                 })
               ),
             ],
-            width: { size: 100, type: "pct" },
           }),
           new Paragraph({
             children: [

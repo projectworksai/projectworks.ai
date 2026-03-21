@@ -273,7 +273,7 @@ function stricterPromptForSection(section: SectionKey): string {
     return `QUALITY GATE (STRICT): Provide 10-20 schedule tasks with project-specific multi-level WBS (e.g. 1.1, 1.2, 2.1). Avoid generic labels.`;
   }
   if (section === "resources") {
-    return `QUALITY GATE (STRICT): Include complete organogram text, 4+ roles, labourBreakdown entries, and contact details.`;
+    return `QUALITY GATE (STRICT): Include complete organogram (PM/PE/supervisor hierarchy chains), 4+ roles, labourBreakdown; contacts may use role-only rows with empty phone/email if names unknown.`;
   }
   if (section === "plantAndEquipment") {
     return `QUALITY GATE (STRICT): Plant/equipment must include quantity and capacity/spec for major items, tied to project activities.`;
@@ -292,6 +292,9 @@ function stricterPromptForSection(section: SectionKey): string {
   }
   if (section === "scope") {
     return `QUALITY GATE (STRICT): scopeOfWork must be specific, detailed, and non-generic with clear boundaries/inclusions/exclusions.`;
+  }
+  if (section === "safetyManagement") {
+    return `QUALITY GATE (STRICT): Every hazard MUST include primaryAccountableRole varied by hazard type; never default all rows to one generic role.`;
   }
   return `QUALITY GATE (STRICT): Provide detailed, project-specific and non-generic content.`;
 }
@@ -335,8 +338,8 @@ WBS must be detailed and project-specific (multi-level where relevant, not gener
 {
   "roles": [{"role": "Role name", "count": number or 1, "responsibilities": "brief summary"}, ...],
   "labourBreakdown": [{"discipline": "e.g. Civil crew", "count": number, "utilisation": "e.g. peak weeks 4-10"}] or [],
-  "contacts": [{"role": "Role", "name": "Person", "phone": "optional", "email": "optional"}] or [],
-  "organogram": "Simple text organogram using arrows and hierarchy lines",
+  "contacts": [{"role": "Role", "name": "optional or blank", "phone": "", "email": ""}] or [],
+  "organogram": "Hierarchy organogram using chains like: Project Manager -> Site Engineer -> Construction Crew; Project Manager -> Architect (use -> between levels, ; between branches). Suitable for SmartArt Hierarchy in Word.",
   "equipment": [{"item": "Equipment/plant", "quantity": number or "as required", "notes": "optional"}, ...],
   "assumptions": ["resource assumption 1", ...],
   "organisationSummary": "Short narrative on resourcing approach"
@@ -424,7 +427,14 @@ Describe delivery methodology. If non-construction, adapt as delivery approach (
 {
   "summary": "Brief overview of safety management approach (1-2 paragraphs)",
   "objectives": ["safety objective 1", ...],
-  "hazards": [{"hazard": "description", "control": "control measure"}, ...],
+  "hazards": [
+    {
+      "hazard": "description",
+      "control": "control measure",
+      "primaryAccountableRole": "Choose ONE primary coordination role for THIS hazard from: Project Manager | Project Engineer | Site Supervisor | Plant/Equipment Operator | Safety Officer/Advisor. Vary by hazard (do not use the same role for every row unless justified). WHS remains everyone's responsibility; this field is the lead coordinator."
+    },
+    ...
+  ],
   "swms": ["SWMS or high-risk activity", ...],
   "trainingAndInduction": "Training and induction requirements",
   "emergencyProcedures": "Brief emergency and incident response"
