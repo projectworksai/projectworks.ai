@@ -29,6 +29,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [downloadingScheduleTarget, setDownloadingScheduleTarget] = useState<null | "msproject" | "primavera">(null);
+  const [downloadingRiskMatrix, setDownloadingRiskMatrix] = useState(false);
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
   const [authMode, setAuthMode] = useState<"signin" | "signup" | null>(null);
   const [authEmail, setAuthEmail] = useState("");
@@ -240,10 +241,16 @@ export default function Home() {
       const safety = progressiveData["safety-management"] as Record<string, unknown> | undefined;
       const compliance = progressiveData.compliance as Record<string, unknown> | undefined;
       const sourceDocs = [tenderFile?.name, technicalSpecFile?.name].filter(Boolean) as string[];
+      const contractorName =
+        ((session?.user as { name?: string } | undefined)?.name || "").trim() ||
+        "ProjectWorks.ai Delivery Team";
 
       const planForExport: Record<string, unknown> =
         data ??
         ({
+          projectName: projectName || "",
+          clientName: client || "",
+          contractorName,
           index: "",
           background: overview
             ? [
@@ -275,14 +282,13 @@ export default function Home() {
               }
             : "",
           plantAndEquipment: plant
-            ? [
-                plant.summary ? String(plant.summary) : "",
-                plant.majorPlant ? `Major plant: ${joinArr(plant.majorPlant)}` : "",
-                plant.equipment ? `Equipment: ${(plant.equipment as unknown[]).map((e) => `${(e as any).item ?? ""}${(e as any).quantity != null ? ` (${(e as any).quantity})` : ""}${(e as any).use ? ` — ${(e as any).use}` : ""}`).join(", ")}` : "",
-                plant.maintenanceAndAvailability ? `Maintenance & availability: ${String(plant.maintenanceAndAvailability)}` : "",
-              ]
-                .filter(Boolean)
-                .join("\n\n")
+            ? {
+                summary: plant.summary ? String(plant.summary) : "",
+                maintenanceAndAvailability: plant.maintenanceAndAvailability
+                  ? String(plant.maintenanceAndAvailability)
+                  : "",
+                equipment: Array.isArray(plant.equipment) ? plant.equipment : [],
+              }
             : "",
           constructionMethodStatement: methodology
             ? [
@@ -330,48 +336,32 @@ export default function Home() {
               }
             : "",
           safetyManagement: safety
-            ? [
-                safety.summary ? String(safety.summary) : "",
-                safety.objectives ? `Objectives: ${joinArr(safety.objectives)}` : "",
-                Array.isArray((safety as any).hazards)
-                  ? `Hazards & controls: ${((safety as any).hazards as any[])
-                      .map((h) => `${h.hazard ?? ""}${h.control ? ` — ${h.control}` : ""}`)
-                      .join(" | ")}`
+            ? {
+                summary: safety.summary ? String(safety.summary) : "",
+                objectives: Array.isArray(safety.objectives) ? safety.objectives : [],
+                hazards: Array.isArray((safety as Record<string, unknown>).hazards)
+                  ? (safety as Record<string, unknown>).hazards
+                  : [],
+                swms: Array.isArray((safety as Record<string, unknown>).swms)
+                  ? (safety as Record<string, unknown>).swms
+                  : [],
+                trainingAndInduction: safety.trainingAndInduction
+                  ? String(safety.trainingAndInduction)
                   : "",
-                Array.isArray((safety as any).swms) ? `SWMS/high-risk: ${joinArr((safety as any).swms)}` : "",
-                safety.trainingAndInduction ? `Training & induction: ${String(safety.trainingAndInduction)}` : "",
-                safety.emergencyProcedures ? `Emergency procedures: ${String(safety.emergencyProcedures)}` : "",
-              ]
-                .filter(Boolean)
-                .join("\n\n")
+                emergencyProcedures: safety.emergencyProcedures
+                  ? String(safety.emergencyProcedures)
+                  : "",
+              }
             : "",
           constructionSchedule: schedule
-            ? [
-                schedule.criticalPathNotes ? String(schedule.criticalPathNotes) : "",
-                Array.isArray(schedule.phases)
-                  ? `Phases: ${(schedule.phases as Array<Record<string, unknown>>)
-                      .map((p) => `${String(p.name ?? "Phase")} (${String(p.durationWeeks ?? "—")}w)${p.description ? ` - ${String(p.description)}` : ""}`)
-                      .join("; ")}`
+            ? {
+                criticalPathNotes: schedule.criticalPathNotes
+                  ? String(schedule.criticalPathNotes)
                   : "",
-                Array.isArray(schedule.milestones)
-                  ? `Milestones: ${(schedule.milestones as Array<Record<string, unknown>>)
-                      .map((m) => `${String(m.name ?? "Milestone")} (week ${String(m.targetWeek ?? "—")})`)
-                      .join("; ")}`
-                  : "",
-                Array.isArray(schedule.keyDates)
-                  ? `Key dates: ${(schedule.keyDates as Array<Record<string, unknown>>)
-                      .map((d) => `${String(d.label ?? "Date")} (week ${String(d.week ?? "—")})`)
-                      .join("; ")}`
-                  : "",
-                Array.isArray(schedule.tasks)
-                  ? `WBS tasks: ${(schedule.tasks as Array<Record<string, unknown>>)
-                      .slice(0, 60)
-                      .map((t) => `${String(t.wbs ?? "")} ${String(t.name ?? "")} (${String(t.durationDays ?? "—")}d)`)
-                      .join("; ")}`
-                  : "",
-              ]
-                .filter(Boolean)
-                .join("\n\n")
+                phases: Array.isArray(schedule.phases) ? schedule.phases : [],
+                milestones: Array.isArray(schedule.milestones) ? schedule.milestones : [],
+                tasks: Array.isArray(schedule.tasks) ? schedule.tasks : [],
+              }
             : "",
           projectReference: compliance
             ? [
@@ -395,26 +385,19 @@ export default function Home() {
             ? (risk as Record<string, unknown>).riskRegister
             : "",
           appendixProjectProgram: schedule
-            ? [
-                Array.isArray(schedule.phases)
-                  ? `Phases: ${(schedule.phases as Array<Record<string, unknown>>)
-                      .map((p) => `${String(p.name ?? "")} (${String(p.durationWeeks ?? "—")} weeks)`)
-                      .join("; ")}`
-                  : "",
-                Array.isArray(schedule.milestones)
-                  ? `Milestones: ${(schedule.milestones as Array<Record<string, unknown>>)
-                      .map((m) => `${String(m.name ?? "")} (week ${String(m.targetWeek ?? "—")})`)
-                      .join("; ")}`
-                  : "",
-              ]
-                .filter(Boolean)
-                .join("\n\n")
+            ? {
+                summary: schedule.criticalPathNotes ? String(schedule.criticalPathNotes) : "",
+                phases: Array.isArray(schedule.phases) ? schedule.phases : [],
+                milestones: Array.isArray(schedule.milestones) ? schedule.milestones : [],
+              }
             : "",
           appendixInspectionAndTestPlan: quality && Array.isArray((quality as Record<string, unknown>).inspectionAndTest)
             ? (quality as Record<string, unknown>).inspectionAndTest
             : "",
           appendixReferenceNotes: [
             sourceDocs.length > 0 ? `Referenced attachments: ${sourceDocs.join("; ")}` : "",
+            schedule ? "Schedule downloads: MS Project and Primavera are available as CSV exports from this output panel." : "",
+            risk ? "Risk matrix download: Excel-compatible CSV is available from this output panel." : "",
             compliance && Array.isArray((compliance as Record<string, unknown>).sourceReferences)
               ? `Compliance references: ${((compliance as Record<string, unknown>).sourceReferences as Array<Record<string, unknown>>)
                   .map((s) => `${String(s.type ?? "reference")}: ${String(s.reference ?? "")}`)
@@ -450,7 +433,7 @@ export default function Home() {
     } finally {
       setDownloading(false);
     }
-  }, [data, projectName, progressiveData, tenderFile, technicalSpecFile]);
+  }, [client, data, projectName, progressiveData, session?.user, tenderFile, technicalSpecFile]);
 
   const schedulePlanForExport = data ?? (progressiveData.schedule && Array.isArray(progressiveData.schedule.tasks) && (progressiveData.schedule.tasks as unknown[]).length > 0
     ? { schedule: progressiveData.schedule.tasks }
@@ -498,6 +481,51 @@ export default function Home() {
       setDownloadingScheduleTarget(null);
     }
   }, [data, progressiveData, projectName]);
+
+  const downloadRiskMatrixCsv = useCallback(async () => {
+    const riskData = progressiveData.risk as Record<string, unknown> | undefined;
+    const planToUse =
+      data ??
+      (riskData && Array.isArray(riskData.riskRegister) && (riskData.riskRegister as unknown[]).length > 0
+        ? { riskManagement: { riskRegister: riskData.riskRegister } }
+        : null);
+    if (!planToUse) {
+      setError("Generate a plan with Risk Management first to download the risk matrix.");
+      return;
+    }
+    setDownloadingRiskMatrix(true);
+    setError("");
+    try {
+      const res = await fetch("/api/export", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          plan: planToUse,
+          format: "risk_matrix_csv",
+        }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        if (res.status === 402) {
+          setError("Pro subscription required. Upgrade to download.");
+          return;
+        }
+        throw new Error(errData.error || "Risk matrix export failed");
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const safeBase = (projectName || "export").replace(/[/\\?*:|"]/g, "-");
+      a.download = `risk-matrix-${safeBase}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Risk matrix download failed");
+    } finally {
+      setDownloadingRiskMatrix(false);
+    }
+  }, [data, progressiveData.risk, projectName]);
 
   const handleCheckout = useCallback(async () => {
     // For now, route users to a simple upgrade/pricing page.
@@ -1263,7 +1291,7 @@ export default function Home() {
                     <button
                       type="button"
                       onClick={() => downloadScheduleCsv("primavera")}
-                      disabled={downloadingScheduleTarget !== null}
+                      disabled={downloadingScheduleTarget !== null || downloadingRiskMatrix}
                       style={{
                         padding: "8px 16px",
                         fontSize: 13,
@@ -1279,6 +1307,24 @@ export default function Home() {
                       {downloadingScheduleTarget === "primavera"
                         ? "Preparing…"
                         : "Open in Primavera"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={downloadRiskMatrixCsv}
+                      disabled={downloadingScheduleTarget !== null || downloadingRiskMatrix}
+                      style={{
+                        padding: "8px 16px",
+                        fontSize: 13,
+                        fontWeight: 500,
+                        color: "#0f172a",
+                        background: "#fff7ed",
+                        border: "1px solid #fdba74",
+                        borderRadius: 6,
+                        cursor: downloadingScheduleTarget !== null || downloadingRiskMatrix ? "wait" : "pointer",
+                        fontFamily: "inherit",
+                      }}
+                    >
+                      {downloadingRiskMatrix ? "Preparing…" : "Risk Matrix (Excel)"}
                     </button>
                   </>
                 ) : (
@@ -1735,7 +1781,7 @@ export default function Home() {
                             <p style={{ margin: "0 0 4px 0", fontWeight: 600 }}>Contacts</p>
                             <ul style={{ margin: "0 0 8px 0", paddingLeft: 18 }}>
                               {contacts.map((c: Record<string, unknown>, i: number) => (
-                                <li key={i}>{String(c.role ?? "")}: {String(c.name ?? "")}{c.phone ? ` · ${String(c.phone)}` : ""}{c.email ? ` · ${String(c.email)}` : ""}</li>
+                                <li key={i}>{String(c.role ?? "")}{c.phone ? ` · ${String(c.phone)}` : ""}{c.email ? ` · ${String(c.email)}` : ""}</li>
                               ))}
                             </ul>
                           </>

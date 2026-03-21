@@ -37,6 +37,8 @@ type ScheduleItem = {
   dependencies?: Array<number | string>;
 };
 
+type RiskRegisterItem = Record<string, unknown>;
+
 function toDateString(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
@@ -74,11 +76,12 @@ function buildScheduleCsv(plan: PlanPayload, projectStartDate?: string): string 
       ? item.dependencies.map((p) => String(p)).join(";")
       : "";
 
-    const notes = (plan["constructionSchedule"] ?? "")
-      .toString()
-      .split("\n")
-      .find((line) => line.toLowerCase().includes((item.name ?? "").toString().toLowerCase()))
-      ?? "";
+    const constructionScheduleText =
+      typeof plan["constructionSchedule"] === "string" ? String(plan["constructionSchedule"]) : "";
+    const notes =
+      constructionScheduleText
+        .split("\n")
+        .find((line) => line.toLowerCase().includes((item.name ?? "").toString().toLowerCase())) ?? "";
 
     const safeNotes = notes.replace(/"/g, '""');
 
@@ -162,8 +165,104 @@ function riskBandColor(score: number): string {
   return "DCFCE7"; // low
 }
 
+function riskBandLabel(score: number): string {
+  if (score >= 16) return "High";
+  if (score >= 9) return "Medium";
+  if (score >= 4) return "Low-Medium";
+  return "Low";
+}
+
+function extractRiskRegister(plan: PlanPayload): RiskRegisterItem[] {
+  const riskManagement = plan["riskManagement"];
+  if (
+    riskManagement &&
+    typeof riskManagement === "object" &&
+    !Array.isArray(riskManagement) &&
+    Array.isArray((riskManagement as Record<string, unknown>).riskRegister)
+  ) {
+    return (riskManagement as Record<string, unknown>).riskRegister as RiskRegisterItem[];
+  }
+  if (Array.isArray(plan["appendixRiskMatrix"])) {
+    return plan["appendixRiskMatrix"] as RiskRegisterItem[];
+  }
+  return [];
+}
+
+function buildRiskMatrixCsv(plan: PlanPayload): string {
+  const register = extractRiskRegister(plan);
+  const rows: string[] = [];
+  rows.push(
+    "ID,Risk Description,Cause,Impact,Likelihood,Severity,Risk Score,Matrix Cell,Rating,Mitigation,Owner"
+  );
+  for (const r of register) {
+    const l = Number(r.likelihood);
+    const s = Number(r.severity);
+    const derivedScore = Number.isFinite(l) && Number.isFinite(s) ? l * s : NaN;
+    const score = Number.isFinite(Number(r.riskScore)) ? Number(r.riskScore) : derivedScore;
+    const safe = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+    const matrixCell =
+      Number.isFinite(l) && Number.isFinite(s) && l >= 1 && l <= 5 && s >= 1 && s <= 5
+        ? `S${s}-L${l}`
+        : "";
+    rows.push(
+      [
+        safe(r.id ?? ""),
+        safe(r.riskDescription ?? ""),
+        safe(r.cause ?? ""),
+        safe(r.impact ?? ""),
+        safe(Number.isFinite(l) ? l : ""),
+        safe(Number.isFinite(s) ? s : ""),
+        safe(Number.isFinite(score) ? score : ""),
+        safe(matrixCell),
+        safe(Number.isFinite(score) ? riskBandLabel(score) : ""),
+        safe(r.mitigationStrategy ?? ""),
+        safe(r.owner ?? ""),
+      ].join(",")
+    );
+  }
+  return rows.join("\r\n");
+}
+
+function smartArtOrganogramParagraphs(organogram: string): Paragraph[] {
+  const chains = organogram
+    .split(/[;\n]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (chains.length === 0) return bodyParagraphs(organogram);
+
+  const paragraphs: Paragraph[] = [
+    new Paragraph({
+      children: [new TextRun({ text: "Hierarchy (role-based)", font: "Calibri", size: 22, bold: true })],
+      spacing: { after: 100 },
+    }),
+  ];
+  for (const chain of chains.slice(0, 20)) {
+    const parts = chain
+      .split("->")
+      .map((p) => p.trim())
+      .filter(Boolean);
+    if (parts.length === 0) continue;
+    paragraphs.push(
+      new Paragraph({
+        children: [
+          new TextRun({
+            text: parts.join("  ->  "),
+            font: "Calibri",
+            size: 22,
+          }),
+        ],
+        spacing: { after: 80 },
+      })
+    );
+  }
+  return paragraphs;
+}
+
 async function buildDocx(plan: PlanPayload): Promise<Buffer> {
   const children: (Paragraph | Table)[] = [];
+  const projectName = String(plan["projectName"] ?? "").trim();
+  const clientName = String(plan["clientName"] ?? "").trim();
+  const contractorName = String(plan["contractorName"] ?? "").trim();
 
   children.push(
     new Paragraph({
@@ -179,6 +278,51 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
       spacing: { after: 360 },
     })
   );
+  if (projectName || clientName || contractorName) {
+    children.push(
+      new Table({
+        rows: [
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [
+                  new Paragraph({
+                    children: [new TextRun({ text: "Project Name", font: "Calibri", size: 22, bold: true })],
+                  }),
+                ],
+              }),
+              new TableCell({ children: [new Paragraph(projectName || "—")] }),
+            ],
+          }),
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [
+                  new Paragraph({
+                    children: [new TextRun({ text: "Client", font: "Calibri", size: 22, bold: true })],
+                  }),
+                ],
+              }),
+              new TableCell({ children: [new Paragraph(clientName || "—")] }),
+            ],
+          }),
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [
+                  new Paragraph({
+                    children: [new TextRun({ text: "Contractor", font: "Calibri", size: 22, bold: true })],
+                  }),
+                ],
+              }),
+              new TableCell({ children: [new Paragraph(contractorName || "—")] }),
+            ],
+          }),
+        ],
+        width: { size: 100, type: "pct" },
+      })
+    );
+  }
 
   for (const key of OUTLINE_SECTION_KEYS) {
     const title = SECTION_DISPLAY_NAMES[key] || key;
@@ -277,7 +421,7 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
             children: [new TextRun({ text: "Organogram", font: "Calibri", size: 22, bold: true })],
             spacing: { after: 120 },
           }),
-          ...bodyParagraphs(organogram)
+          ...smartArtOrganogramParagraphs(organogram)
         );
       }
       if (roles.length > 0) {
@@ -313,13 +457,13 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
       if (contacts.length > 0) {
         children.push(
           new Paragraph({
-            children: [new TextRun({ text: "Contact Information", font: "Calibri", size: 22, bold: true })],
+            children: [new TextRun({ text: "Role Contact Channels", font: "Calibri", size: 22, bold: true })],
             spacing: { before: 180, after: 120 },
           }),
           new Table({
             rows: [
               new TableRow({
-                children: ["Role", "Name", "Phone", "Email"].map((h) =>
+                children: ["Role", "Phone", "Email"].map((h) =>
                   new TableCell({
                     children: [new Paragraph({ children: [new TextRun({ text: h, font: "Calibri", size: 21, bold: true })] })],
                   })
@@ -330,7 +474,6 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
                 return new TableRow({
                   children: [
                     new TableCell({ children: [new Paragraph(String(row.role ?? ""))] }),
-                    new TableCell({ children: [new Paragraph(String(row.name ?? ""))] }),
                     new TableCell({ children: [new Paragraph(String(row.phone ?? ""))] }),
                     new TableCell({ children: [new Paragraph(String(row.email ?? ""))] }),
                   ],
@@ -340,6 +483,133 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
             width: { size: 100, type: "pct" },
           })
         );
+      }
+    } else if (key === "plantAndEquipment" && value && typeof value === "object" && !Array.isArray(value)) {
+      const plant = value as Record<string, unknown>;
+      const summary = plant.summary ? String(plant.summary) : "";
+      const maintenance = plant.maintenanceAndAvailability ? String(plant.maintenanceAndAvailability) : "";
+      const equipment = Array.isArray(plant.equipment) ? (plant.equipment as Array<Record<string, unknown>>) : [];
+      if (summary) children.push(...bodyParagraphs(summary));
+      if (equipment.length > 0) {
+        children.push(
+          new Paragraph({
+            children: [new TextRun({ text: "Plant and Equipment Schedule", font: "Calibri", size: 22, bold: true })],
+            spacing: { after: 120 },
+          }),
+          new Table({
+            rows: [
+              new TableRow({
+                children: ["Description", "Capacity", "Quantity", "Use/Notes"].map((h) =>
+                  new TableCell({
+                    children: [new Paragraph({ children: [new TextRun({ text: h, font: "Calibri", size: 21, bold: true })] })],
+                  })
+                ),
+              }),
+              ...equipment.slice(0, 40).map((e) =>
+                new TableRow({
+                  children: [
+                    new TableCell({ children: [new Paragraph(String(e.item ?? ""))] }),
+                    new TableCell({ children: [new Paragraph(String(e.capacity ?? ""))] }),
+                    new TableCell({ children: [new Paragraph(String(e.quantity ?? ""))] }),
+                    new TableCell({ children: [new Paragraph(String(e.use ?? e.notes ?? ""))] }),
+                  ],
+                })
+              ),
+            ],
+            width: { size: 100, type: "pct" },
+          })
+        );
+      }
+      if (maintenance) children.push(...bodyParagraphs(`Maintenance & availability: ${maintenance}`));
+    } else if (key === "constructionSchedule" && value && typeof value === "object" && !Array.isArray(value)) {
+      const schedule = value as Record<string, unknown>;
+      const criticalPathNotes = schedule.criticalPathNotes ? String(schedule.criticalPathNotes) : "";
+      const tasks = Array.isArray(schedule.tasks) ? (schedule.tasks as Array<Record<string, unknown>>) : [];
+      if (criticalPathNotes) children.push(...bodyParagraphs(criticalPathNotes));
+      if (tasks.length > 0) {
+        children.push(
+          new Paragraph({
+            children: [new TextRun({ text: "WBS Task Program", font: "Calibri", size: 22, bold: true })],
+            spacing: { after: 120 },
+          }),
+          new Table({
+            rows: [
+              new TableRow({
+                children: ["WBS", "Task", "Phase", "Timeframe"].map((h) =>
+                  new TableCell({
+                    children: [new Paragraph({ children: [new TextRun({ text: h, font: "Calibri", size: 21, bold: true })] })],
+                  })
+                ),
+              }),
+              ...tasks.slice(0, 80).map((t) => {
+                const start = Number(t.startOffsetDays);
+                const duration = Number(t.durationDays);
+                const timeframe =
+                  Number.isFinite(start) && Number.isFinite(duration)
+                    ? `Day ${start} to Day ${start + Math.max(duration, 0)} (${duration} days)`
+                    : "";
+                return new TableRow({
+                  children: [
+                    new TableCell({ children: [new Paragraph(String(t.wbs ?? ""))] }),
+                    new TableCell({ children: [new Paragraph(String(t.name ?? ""))] }),
+                    new TableCell({ children: [new Paragraph(String(t.phase ?? ""))] }),
+                    new TableCell({ children: [new Paragraph(timeframe)] }),
+                  ],
+                });
+              }),
+            ],
+            width: { size: 100, type: "pct" },
+          })
+        );
+      } else {
+        children.push(...bodyParagraphs(typeof value === "string" ? String(value) : "—"));
+      }
+    } else if (key === "safetyManagement" && value && typeof value === "object" && !Array.isArray(value)) {
+      const safety = value as Record<string, unknown>;
+      const summary = safety.summary ? String(safety.summary) : "";
+      const hazards = Array.isArray(safety.hazards) ? (safety.hazards as Array<Record<string, unknown>>) : [];
+      if (summary) children.push(...bodyParagraphs(summary));
+      if (hazards.length > 0) {
+        children.push(
+          new Paragraph({
+            children: [new TextRun({ text: "Hazard Control Register", font: "Calibri", size: 22, bold: true })],
+            spacing: { after: 120 },
+          }),
+          new Table({
+            rows: [
+              new TableRow({
+                children: ["Hazard", "Control", "Responsible Person/Role"].map((h) =>
+                  new TableCell({
+                    children: [new Paragraph({ children: [new TextRun({ text: h, font: "Calibri", size: 21, bold: true })] })],
+                  })
+                ),
+              }),
+              ...hazards.slice(0, 40).map((h) => {
+                const owner = String(h.responsiblePerson ?? h.owner ?? h.role ?? "Safety Manager");
+                return new TableRow({
+                  children: [
+                    new TableCell({ children: [new Paragraph(String(h.hazard ?? ""))] }),
+                    new TableCell({ children: [new Paragraph(String(h.control ?? ""))] }),
+                    new TableCell({ children: [new Paragraph(owner)] }),
+                  ],
+                });
+              }),
+            ],
+            width: { size: 100, type: "pct" },
+          })
+        );
+      }
+      if (Array.isArray(safety.objectives) && safety.objectives.length > 0) {
+        children.push(...bodyParagraphs(`Objectives: ${(safety.objectives as unknown[]).map((x) => String(x)).join("; ")}`));
+      }
+      if (Array.isArray(safety.swms) && safety.swms.length > 0) {
+        children.push(...bodyParagraphs(`SWMS / high-risk activities: ${(safety.swms as unknown[]).map((x) => String(x)).join("; ")}`));
+      }
+      if (safety.trainingAndInduction) {
+        children.push(...bodyParagraphs(`Training and induction: ${String(safety.trainingAndInduction)}`));
+      }
+      if (safety.emergencyProcedures) {
+        children.push(...bodyParagraphs(`Emergency procedures: ${String(safety.emergencyProcedures)}`));
       }
     } else if (key === "riskManagement" && value && typeof value === "object" && !Array.isArray(value)) {
       const risk = value as Record<string, unknown>;
@@ -510,6 +780,183 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
           width: { size: 100, type: "pct" },
         })
       );
+    } else if (key === "appendixRiskMatrix" && Array.isArray(value) && value.length > 0) {
+      const register = value as Array<Record<string, unknown>>;
+      const matrixCounts: number[][] = Array.from({ length: 5 }, () => Array.from({ length: 5 }, () => 0));
+      for (const r of register) {
+        const l = Number(r.likelihood);
+        const s = Number(r.severity);
+        if (Number.isFinite(l) && Number.isFinite(s) && l >= 1 && l <= 5 && s >= 1 && s <= 5) {
+          matrixCounts[s - 1][l - 1] += 1;
+        }
+      }
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: "Risk matrix is downloadable as Excel-compatible CSV (Risk Matrix export).",
+              font: "Calibri",
+              size: 21,
+            }),
+          ],
+          spacing: { after: 120 },
+        }),
+        new Table({
+          rows: [
+            new TableRow({
+              children: [
+                new TableCell({
+                  children: [new Paragraph({ children: [new TextRun({ text: "Severity \\ Likelihood", font: "Calibri", size: 20, bold: true })] })],
+                }),
+                ...[1, 2, 3, 4, 5].map((x) =>
+                  new TableCell({
+                    children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: String(x), font: "Calibri", size: 20, bold: true })] })],
+                  })
+                ),
+              ],
+            }),
+            ...[1, 2, 3, 4, 5].map((sev) =>
+              new TableRow({
+                children: [
+                  new TableCell({
+                    children: [new Paragraph({ children: [new TextRun({ text: String(sev), font: "Calibri", size: 20, bold: true })] })],
+                  }),
+                  ...[1, 2, 3, 4, 5].map((lik) => {
+                    const n = matrixCounts[sev - 1][lik - 1] || 0;
+                    const score = sev * lik;
+                    return new TableCell({
+                      shading: { fill: n > 0 ? riskBandColor(score) : "FFFFFF" },
+                      children: [
+                        new Paragraph({
+                          alignment: AlignmentType.CENTER,
+                          children: [new TextRun({ text: n > 0 ? String(n) : "—", font: "Calibri", size: 20, bold: n > 0 })],
+                        }),
+                      ],
+                    });
+                  }),
+                ],
+              })
+            ),
+          ],
+          width: { size: 100, type: "pct" },
+        }),
+        new Paragraph({
+          children: [new TextRun({ text: "Risk Register", font: "Calibri", size: 22, bold: true })],
+          spacing: { before: 220, after: 120 },
+        }),
+        new Table({
+          rows: [
+            new TableRow({
+              children: ["ID", "Risk", "Cause", "Impact", "L", "S", "Score", "Mitigation", "Owner"].map((h) =>
+                new TableCell({
+                  children: [new Paragraph({ children: [new TextRun({ text: h, font: "Calibri", size: 20, bold: true })] })],
+                })
+              ),
+            }),
+            ...register.slice(0, 20).map((r, i) => {
+              const l = Number(r.likelihood);
+              const s = Number(r.severity);
+              const score = Number.isFinite(Number(r.riskScore)) ? Number(r.riskScore) : (Number.isFinite(l) && Number.isFinite(s) ? l * s : "");
+              return new TableRow({
+                children: [
+                  new TableCell({ children: [new Paragraph(String(r.id ?? `R${i + 1}`))] }),
+                  new TableCell({ children: [new Paragraph(String(r.riskDescription ?? ""))] }),
+                  new TableCell({ children: [new Paragraph(String(r.cause ?? ""))] }),
+                  new TableCell({ children: [new Paragraph(String(r.impact ?? ""))] }),
+                  new TableCell({ children: [new Paragraph(String(r.likelihood ?? ""))] }),
+                  new TableCell({ children: [new Paragraph(String(r.severity ?? ""))] }),
+                  new TableCell({
+                    shading: Number.isFinite(Number(score)) ? { fill: riskBandColor(Number(score)) } : undefined,
+                    children: [new Paragraph(String(score ?? ""))],
+                  }),
+                  new TableCell({ children: [new Paragraph(String(r.mitigationStrategy ?? ""))] }),
+                  new TableCell({ children: [new Paragraph(String(r.owner ?? ""))] }),
+                ],
+              });
+            }),
+          ],
+          width: { size: 100, type: "pct" },
+        })
+      );
+    } else if (
+      key === "appendixProjectProgram" &&
+      value &&
+      typeof value === "object" &&
+      !Array.isArray(value)
+    ) {
+      const program = value as Record<string, unknown>;
+      const summary = typeof program.summary === "string" ? program.summary : "";
+      const phases = Array.isArray(program.phases) ? (program.phases as Array<Record<string, unknown>>) : [];
+      const milestones = Array.isArray(program.milestones) ? (program.milestones as Array<Record<string, unknown>>) : [];
+      if (summary) children.push(...bodyParagraphs(summary));
+      if (phases.length > 0) {
+        children.push(
+          new Paragraph({
+            children: [new TextRun({ text: "Program Phases", font: "Calibri", size: 22, bold: true })],
+            spacing: { after: 100 },
+          }),
+          new Table({
+            rows: [
+              new TableRow({
+                children: ["Phase", "Duration (weeks)", "Description"].map((h) =>
+                  new TableCell({
+                    children: [new Paragraph({ children: [new TextRun({ text: h, font: "Calibri", size: 20, bold: true })] })],
+                  })
+                ),
+              }),
+              ...phases.slice(0, 30).map((p) =>
+                new TableRow({
+                  children: [
+                    new TableCell({ children: [new Paragraph(String(p.name ?? ""))] }),
+                    new TableCell({ children: [new Paragraph(String(p.durationWeeks ?? ""))] }),
+                    new TableCell({ children: [new Paragraph(String(p.description ?? ""))] }),
+                  ],
+                })
+              ),
+            ],
+            width: { size: 100, type: "pct" },
+          })
+        );
+      }
+      if (milestones.length > 0) {
+        children.push(
+          new Paragraph({
+            children: [new TextRun({ text: "Key Milestones", font: "Calibri", size: 22, bold: true })],
+            spacing: { before: 160, after: 100 },
+          }),
+          new Table({
+            rows: [
+              new TableRow({
+                children: ["Milestone", "Target Week", "Deliverable"].map((h) =>
+                  new TableCell({
+                    children: [new Paragraph({ children: [new TextRun({ text: h, font: "Calibri", size: 20, bold: true })] })],
+                  })
+                ),
+              }),
+              ...milestones.slice(0, 30).map((m) =>
+                new TableRow({
+                  children: [
+                    new TableCell({ children: [new Paragraph(String(m.name ?? ""))] }),
+                    new TableCell({ children: [new Paragraph(String(m.targetWeek ?? ""))] }),
+                    new TableCell({ children: [new Paragraph(String(m.deliverable ?? ""))] }),
+                  ],
+                })
+              ),
+            ],
+            width: { size: 100, type: "pct" },
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({
+                text: "Schedule download reference: use MS Project or Primavera CSV exports for full task-level import.",
+                font: "Calibri",
+                size: 21,
+              }),
+            ],
+            spacing: { before: 120 },
+          })
+        );
+      }
     } else {
       children.push(...bodyParagraphs(text));
     }
@@ -601,6 +1048,16 @@ export async function POST(req: Request) {
         headers: {
           "Content-Type": "text/csv; charset=utf-8",
           "Content-Disposition": 'attachment; filename="project-schedule.csv"',
+        },
+      });
+    }
+
+    if (format === "risk_matrix_csv") {
+      const csv = buildRiskMatrixCsv(plan);
+      return new NextResponse(csv, {
+        headers: {
+          "Content-Type": "text/csv; charset=utf-8",
+          "Content-Disposition": 'attachment; filename="risk-matrix.csv"',
         },
       });
     }
