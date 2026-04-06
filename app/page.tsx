@@ -9,12 +9,7 @@ import {
   parseIndexLine,
 } from "@/lib/parser";
 import { SECTION_DISPLAY_NAMES } from "@/lib/parser";
-import { PRO_ONLY_SECTION_KEYS } from "@/lib/tiers";
 import { detectProjectType, getDomainsByProjectType } from "@/lib/project-type";
-
-const PRO_SECTION_NAMES = PRO_ONLY_SECTION_KEYS.map(
-  (k) => SECTION_DISPLAY_NAMES[k] || k
-);
 
 export default function Home() {
   const { data: session, status, update } = useSession();
@@ -46,7 +41,6 @@ export default function Home() {
   const [chatLastQuestion, setChatLastQuestion] = useState("");
   const [isMobile, setIsMobile] = useState(false);
   const [generationMode, setGenerationMode] = useState<"preview" | "full" | null>(null);
-  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const generationAbortRef = useRef<AbortController | null>(null);
 
   type ProgressiveStep = "pending" | "loading" | "done" | "error";
@@ -59,8 +53,6 @@ export default function Home() {
   const [activeProgressiveSections, setActiveProgressiveSections] = useState<string[]>([...PROGRESSIVE_SECTIONS]);
   const [expandedProgressiveSections, setExpandedProgressiveSections] = useState<Record<string, boolean>>({});
   const [useProgressive, setUseProgressive] = useState(true);
-
-  const isPro = (session?.user as { plan?: string } | undefined)?.plan === "PRO";
 
   useEffect(() => {
     const mq = window.matchMedia("(max-width: 768px)");
@@ -188,7 +180,6 @@ export default function Home() {
       const json = await res.json().catch(() => ({}));
 
       if (!res.ok || !json?.success) {
-        if (json?.code === "UPGRADE_REQUIRED" || res.status === 402) setShowUpgradeModal(true);
         const message = json?.message || json?.error || (typeof json === "string" ? json : "") || "Generation failed";
         throw new Error(message);
       }
@@ -421,10 +412,6 @@ export default function Home() {
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        if (res.status === 402) {
-          setError("Pro subscription required. Upgrade to download.");
-          return;
-        }
         throw new Error(errData.error || "Export failed");
       }
       const blob = await res.blob();
@@ -466,10 +453,6 @@ export default function Home() {
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        if (res.status === 402) {
-          setError("Pro subscription required. Upgrade to download.");
-          return;
-        }
         throw new Error(errData.error || "Schedule export failed");
       }
       const blob = await res.blob();
@@ -512,10 +495,6 @@ export default function Home() {
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        if (res.status === 402) {
-          setError("Pro subscription required. Upgrade to download.");
-          return;
-        }
         throw new Error(errData.error || "Risk matrix export failed");
       }
       const blob = await res.blob();
@@ -532,14 +511,6 @@ export default function Home() {
       setDownloadingRiskMatrix(false);
     }
   }, [data, progressiveData.risk, projectName]);
-
-  const handleCheckout = useCallback(async () => {
-    // For now, route users to a simple upgrade/pricing page.
-    // Stripe checkout can be wired to this later.
-    if (typeof window !== "undefined") {
-      window.location.href = "/upgrade";
-    }
-  }, []);
 
   const handleSignIn = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
@@ -722,18 +693,6 @@ export default function Home() {
         </div>
         {status === "authenticated" && session?.user && (
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <span
-              style={{
-                fontSize: 12,
-                fontWeight: 600,
-                padding: "4px 10px",
-                borderRadius: 20,
-                background: isPro ? "#0ea5e9" : "#e2e8f0",
-                color: isPro ? "#fff" : "#475569",
-              }}
-            >
-              {isPro ? "Pro" : "Free"}
-            </span>
             <span style={{ fontSize: 13, color: "#475569" }}>
               {session.user.email}
             </span>
@@ -792,29 +751,10 @@ export default function Home() {
               <p style={{ fontSize: 13, color: "#64748b" }}>Loading…</p>
             ) : status === "authenticated" ? (
               <div>
-                <p style={{ fontSize: 13, color: "#475569", marginBottom: 12 }}>
-                  Signed in. {!isPro && "Upgrade to Pro for full plans and Word export."}
+                <p style={{ fontSize: 13, color: "#475569", marginBottom: 0 }}>
+                  Signed in. Plan Forge V1 includes full plans, Word export, and MS Project / Primavera schedule downloads
+                  for everyone.
                 </p>
-                {!isPro && (
-                  <button
-                    type="button"
-                    onClick={handleCheckout}
-                    style={{
-                      width: "100%",
-                      padding: "10px 16px",
-                      fontSize: 14,
-                      fontWeight: 600,
-                      color: "#fff",
-                      background: "linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)",
-                      border: "none",
-                      borderRadius: 8,
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                    }}
-                  >
-                    Upgrade to Pro
-                  </button>
-                )}
               </div>
             ) : (
               <div>
@@ -1252,205 +1192,87 @@ export default function Home() {
             <h2 style={{ fontSize: "1rem", fontWeight: 600, color: "#0f172a", margin: 0 }}>
               Output
             </h2>
-            {hasOutput && isPro && (
+            {hasOutput && (
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                {isPro ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={downloadWord}
-                      disabled={downloading}
-                      style={{
-                        padding: "8px 16px",
-                        fontSize: 13,
-                        fontWeight: 500,
-                        color: "#fff",
-                        background: "linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)",
-                        border: "none",
-                        borderRadius: 6,
-                        cursor: downloading ? "wait" : "pointer",
-                        fontFamily: "inherit",
-                      }}
-                    >
-                      {downloading ? "Preparing…" : "Download Word"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => downloadScheduleCsv("msproject")}
-                      disabled={downloadingScheduleTarget !== null}
-                      style={{
-                        padding: "8px 16px",
-                        fontSize: 13,
-                        fontWeight: 500,
-                        color: "#0f172a",
-                        background: "#e5f0ff",
-                        border: "1px solid #bfdbfe",
-                        borderRadius: 6,
-                        cursor: downloadingScheduleTarget !== null ? "wait" : "pointer",
-                        fontFamily: "inherit",
-                      }}
-                    >
-                      {downloadingScheduleTarget === "msproject"
-                        ? "Preparing…"
-                        : "Open in MS Project"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => downloadScheduleCsv("primavera")}
-                      disabled={downloadingScheduleTarget !== null || downloadingRiskMatrix}
-                      style={{
-                        padding: "8px 16px",
-                        fontSize: 13,
-                        fontWeight: 500,
-                        color: "#0f172a",
-                        background: "#eefcf3",
-                        border: "1px solid #bbf7d0",
-                        borderRadius: 6,
-                        cursor: downloadingScheduleTarget !== null ? "wait" : "pointer",
-                        fontFamily: "inherit",
-                      }}
-                    >
-                      {downloadingScheduleTarget === "primavera"
-                        ? "Preparing…"
-                        : "Open in Primavera"}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={downloadRiskMatrixCsv}
-                      disabled={downloadingScheduleTarget !== null || downloadingRiskMatrix}
-                      style={{
-                        padding: "8px 16px",
-                        fontSize: 13,
-                        fontWeight: 500,
-                        color: "#0f172a",
-                        background: "#fff7ed",
-                        border: "1px solid #fdba74",
-                        borderRadius: 6,
-                        cursor: downloadingScheduleTarget !== null || downloadingRiskMatrix ? "wait" : "pointer",
-                        fontFamily: "inherit",
-                      }}
-                    >
-                      {downloadingRiskMatrix ? "Preparing…" : "Risk Matrix (Excel)"}
-                    </button>
-                  </>
-                ) : (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8, alignItems: "flex-start" }}>
-                    <p style={{ margin: 0, fontSize: 12, color: "#475569", lineHeight: 1.4 }}>
-                      {status !== "authenticated"
-                        ? "Sign in or subscribe to download Word/PDF. Schedule (MS Project / Primavera) requires a subscription."
-                        : "Subscribe to download Word/PDF and schedule for MS Project or Primavera."}
-                    </p>
-                    <p style={{ margin: 0, fontSize: 11, color: "#94a3b8", lineHeight: 1.3 }}>
-                      Free: preview plans · Sign in: 1 full plan · Subscribe: Word/PDF &amp; schedule (MS Project/Primavera)
-                    </p>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                      {status !== "authenticated" && (
-                        <button
-                          type="button"
-                          onClick={() => setAuthMode("signin")}
-                          style={{
-                            padding: "8px 16px",
-                            fontSize: 13,
-                            fontWeight: 500,
-                            color: "#fff",
-                            background: "#0f172a",
-                            border: "none",
-                            borderRadius: 6,
-                            cursor: "pointer",
-                            fontFamily: "inherit",
-                          }}
-                        >
-                          Sign in
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={handleCheckout}
-                        style={{
-                          padding: "8px 16px",
-                          fontSize: 13,
-                          fontWeight: 500,
-                          color: "#0ea5e9",
-                          background: "#f0f9ff",
-                          border: "1px solid #bae6fd",
-                          borderRadius: 6,
-                          cursor: "pointer",
-                          fontFamily: "inherit",
-                        }}
-                      >
-                        {status === "authenticated" ? "Subscribe to download" : "View pricing"}
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-          {!isPro && (
-            <div
-              style={{
-                marginBottom: 14,
-                padding: "10px 12px",
-                borderRadius: 10,
-                border: "1px solid #e2e8f0",
-                background: "#f8fafc",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                gap: 12,
-                flexWrap: "wrap",
-              }}
-            >
-              <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 240, flex: "1 1 auto" }}>
-                <p style={{ margin: 0, fontSize: 12, color: "#0f172a", lineHeight: 1.35 }}>
-                  {status !== "authenticated"
-                    ? "Sign in or subscribe to download Word/PDF. Schedule (MS Project / Primavera) requires a subscription."
-                    : "Subscribe to download Word/PDF and schedule for MS Project or Primavera."}
-                </p>
-                <p style={{ margin: 0, fontSize: 11, color: "#64748b", lineHeight: 1.3 }}>
-                  Free: unlimited previews · Signed in: 1 full plan · Subscription: exports + schedules
-                </p>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                {status !== "authenticated" && (
-                  <button
-                    type="button"
-                    onClick={() => setAuthMode("signin")}
-                    style={{
-                      padding: "7px 12px",
-                      fontSize: 12,
-                      fontWeight: 600,
-                      color: "#0f172a",
-                      background: "#ffffff",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: 8,
-                      cursor: "pointer",
-                      fontFamily: "inherit",
-                    }}
-                  >
-                    Sign in
-                  </button>
-                )}
                 <button
                   type="button"
-                  onClick={handleCheckout}
+                  onClick={downloadWord}
+                  disabled={downloading}
                   style={{
-                    padding: "7px 12px",
-                    fontSize: 12,
-                    fontWeight: 600,
+                    padding: "8px 16px",
+                    fontSize: 13,
+                    fontWeight: 500,
                     color: "#fff",
                     background: "linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)",
                     border: "none",
-                    borderRadius: 8,
-                    cursor: "pointer",
+                    borderRadius: 6,
+                    cursor: downloading ? "wait" : "pointer",
                     fontFamily: "inherit",
                   }}
                 >
-                  {status === "authenticated" ? "Subscribe" : "View pricing"}
+                  {downloading ? "Preparing…" : "Download Word"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => downloadScheduleCsv("msproject")}
+                  disabled={downloadingScheduleTarget !== null}
+                  style={{
+                    padding: "8px 16px",
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: "#0f172a",
+                    background: "#e5f0ff",
+                    border: "1px solid #bfdbfe",
+                    borderRadius: 6,
+                    cursor: downloadingScheduleTarget !== null ? "wait" : "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  {downloadingScheduleTarget === "msproject"
+                    ? "Preparing…"
+                    : "Open in MS Project"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => downloadScheduleCsv("primavera")}
+                  disabled={downloadingScheduleTarget !== null || downloadingRiskMatrix}
+                  style={{
+                    padding: "8px 16px",
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: "#0f172a",
+                    background: "#eefcf3",
+                    border: "1px solid #bbf7d0",
+                    borderRadius: 6,
+                    cursor: downloadingScheduleTarget !== null ? "wait" : "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  {downloadingScheduleTarget === "primavera"
+                    ? "Preparing…"
+                    : "Open in Primavera"}
+                </button>
+                <button
+                  type="button"
+                  onClick={downloadRiskMatrixCsv}
+                  disabled={downloadingScheduleTarget !== null || downloadingRiskMatrix}
+                  style={{
+                    padding: "8px 16px",
+                    fontSize: 13,
+                    fontWeight: 500,
+                    color: "#0f172a",
+                    background: "#fff7ed",
+                    border: "1px solid #fdba74",
+                    borderRadius: 6,
+                    cursor: downloadingScheduleTarget !== null || downloadingRiskMatrix ? "wait" : "pointer",
+                    fontFamily: "inherit",
+                  }}
+                >
+                  {downloadingRiskMatrix ? "Preparing…" : "Risk Matrix (Excel)"}
                 </button>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           <div style={{ flex: 1, overflow: "auto", fontSize: 13, lineHeight: 1.55 }}>
             {loading && !hasProgressive && (
@@ -2027,8 +1849,8 @@ export default function Home() {
                   color: "#1d4ed8",
                 }}
               >
-                This is a preview of your project plan. Create a free account to unlock the full execution plan,
-                including detailed tasks, dependencies, procurement, and compliance checklists.
+                You&apos;re generating without signing in. All sections are shown below; sign in to save plans across
+                sessions and use the full signed-in workflow.
               </div>
             )}
             {hasSections && !hasProgressive &&
@@ -2042,15 +1864,6 @@ export default function Home() {
                 const isExpanded = expandedSections[title] ?? isIndex;
                 const toggle = () => setExpandedSections((prev) => ({ ...prev, [title]: !prev[title] }));
                 const summary = isIndex ? (indexRows.length ? "Table of contents" : "—") : toSummary(text);
-                const isLockedSection =
-                  generationMode === "preview" &&
-                  !isIndex &&
-                  title !== "Background" &&
-                  title !== "Scope";
-
-                if (generationMode === "preview" && isLockedSection) {
-                  return null;
-                }
                 return (
                   <div key={title} style={{ marginBottom: 12, borderBottom: "1px solid #f1f5f9", paddingBottom: 12 }}>
                     <button
@@ -2115,115 +1928,9 @@ export default function Home() {
                   </div>
                 );
               })}
-            {hasSections && !hasProgressive && !isPro && (
-              <div
-                style={{
-                  marginTop: 16,
-                  padding: 16,
-                  background: "#f8fafc",
-                  borderRadius: 8,
-                  border: "1px solid #e2e8f0",
-                }}
-              >
-                <p style={{ fontSize: 12, fontWeight: 600, color: "#334155", margin: "0 0 8px 0" }}>
-                  Pro unlocks: {PRO_SECTION_NAMES.slice(0, 4).join(", ")}…
-                </p>
-                <p style={{ fontSize: 12, color: "#64748b", margin: 0 }}>
-                  Upgrade for Quality, Risk, Safety, Schedule, appendices, and Word download.
-                </p>
-              </div>
-            )}
           </div>
         </section>
       </div>
-      {showUpgradeModal && (
-        <div
-          style={{
-            position: "fixed",
-            inset: 0,
-            background: "rgba(15,23,42,0.55)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 50,
-          }}
-        >
-          <section
-            style={{
-              width: "100%",
-              maxWidth: 420,
-              background: "#ffffff",
-              borderRadius: 16,
-              padding: 24,
-              boxShadow: "0 20px 45px rgba(15,23,42,0.35)",
-              border: "1px solid #e2e8f0",
-            }}
-          >
-            <h2 style={{ margin: 0, marginBottom: 8, fontSize: 18, fontWeight: 600, color: "#0f172a" }}>
-              Unlock unlimited execution plans
-            </h2>
-            <p style={{ margin: "0 0 16px 0", fontSize: 13, color: "#475569" }}>
-              You&apos;ve used your free full project generation. Upgrade to continue generating detailed execution
-              plans, export Word/PDF, and download schedules for MS Project and Primavera.
-            </p>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-              <button
-                type="button"
-                onClick={() => {
-                  window.location.href = "/pricing#pro";
-                }}
-                style={{
-                  padding: "10px 14px",
-                  borderRadius: 999,
-                  border: "none",
-                  background: "linear-gradient(135deg, #0f172a 0%, #1d4ed8 100%)",
-                  color: "#f9fafb",
-                  fontSize: 13,
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                Upgrade to Pro ($29/month)
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  window.location.href = "/pricing#team";
-                }}
-                style={{
-                  padding: "9px 14px",
-                  borderRadius: 999,
-                  border: "1px solid #e2e8f0",
-                  background: "#f8fafc",
-                  color: "#0f172a",
-                  fontSize: 13,
-                  fontWeight: 500,
-                  cursor: "pointer",
-                  fontFamily: "inherit",
-                }}
-              >
-                Upgrade to Team ($99/month)
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowUpgradeModal(false)}
-              style={{
-                marginTop: 4,
-                border: "none",
-                background: "none",
-                color: "#64748b",
-                fontSize: 12,
-                cursor: "pointer",
-                textDecoration: "underline",
-              }}
-            >
-              Maybe later
-            </button>
-          </section>
-        </div>
-      )}
       {/* Chat assistant — avoid overlapping content on mobile */}
       <div
         style={{

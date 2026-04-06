@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { getIndexContentForTable } from "@/lib/parser";
-import { canAccessSection } from "@/lib/tiers";
 import { generatePlan } from "@/lib/ai/provider";
 import mammoth from "mammoth";
 import { authOptions } from "@/lib/auth";
@@ -163,7 +162,6 @@ type GenerationMode = "preview" | "full";
       select: {
         plan: true,
         subscriptionTier: true,
-        planGenerationsUsed: true,
       },
     });
 
@@ -178,32 +176,9 @@ type GenerationMode = "preview" | "full";
     const subscriptionTier =
       (user.subscriptionTier as "free" | "pro" | "team" | "enterprise") ||
       "free";
-    const generationsUsed = user.planGenerationsUsed ?? 0;
-
-    const isPaidTier =
-      subscriptionTier === "pro" ||
-      subscriptionTier === "team" ||
-      subscriptionTier === "enterprise";
-
-    if (!isPaidTier && generationsUsed >= 1) {
-      return errorResponse(
-        "UPGRADE_REQUIRED",
-        "You have used your free full project generation. Upgrade to Pro or Team for unlimited execution plans.",
-        402
-      );
-    }
-
-    // At this point, the full plan is allowed. Apply existing PRO/FREE section gating.
     const legacyTier = user.plan ?? "FREE";
-    const filtered: Record<string, unknown> = {};
-    for (const [key, value] of Object.entries(parsed)) {
-      if (canAccessSection(key, legacyTier)) {
-        filtered[key] = value;
-      }
-    }
-    const planData = Object.keys(filtered).length > 0 ? filtered : parsed;
 
-    // Increment full-plan generation counter for all tiers (free and paid).
+    // V1: full plan for every signed-in user; optional usage counter for analytics.
     await prisma.user.update({
       where: { id: session.user.id },
       data: { planGenerationsUsed: { increment: 1 } },
@@ -211,7 +186,7 @@ type GenerationMode = "preview" | "full";
 
     return NextResponse.json({
       success: true,
-      data: planData,
+      data: parsed,
       tier: legacyTier,
       mode: "full",
       subscriptionTier,

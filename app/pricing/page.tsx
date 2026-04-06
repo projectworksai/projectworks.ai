@@ -35,8 +35,8 @@ export default function PricingPage() {
               color: "#64748b",
             }}
           >
-            Start with free previews. Upgrade when you&apos;re ready for full execution plans, exports, and team
-            collaboration.
+            <strong>Plan Forge V1</strong> includes full execution plans, Word export, and MS Project / Primavera
+            schedule CSVs for everyone. The Pro, Team, and Enterprise rows below describe options we may offer in V2.
           </p>
         </header>
 
@@ -57,16 +57,16 @@ export default function PricingPage() {
               padding: 20,
             }}
           >
-            <h2 style={{ margin: 0, fontSize: 16 }}>Free</h2>
+            <h2 style={{ margin: 0, fontSize: 16 }}>Free (V1)</h2>
             <p style={{ margin: "6px 0 0 0", fontSize: 12, color: "#64748b" }}>
-              For trying Plan Forge on a single project.
+              Current release: full features at no charge.
             </p>
             <p style={{ margin: "14px 0 8px 0", fontSize: 22, fontWeight: 600 }}>$0</p>
             <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: "#334155", lineHeight: 1.6 }}>
-              <li>Unlimited preview generations</li>
-              <li>1 full project plan</li>
-              <li>Watermarked output</li>
-              <li>No exports or saving multiple projects</li>
+              <li>Full project plans (progressive and signed-in workflows)</li>
+              <li>Word (.docx) export</li>
+              <li>Schedule CSV for MS Project and Primavera</li>
+              <li>Risk matrix CSV export</li>
             </ul>
           </article>
 
@@ -97,9 +97,9 @@ export default function PricingPage() {
             >
               Most popular
           </div>
-            <h2 style={{ margin: 0, fontSize: 16 }}>Pro</h2>
+            <h2 style={{ margin: 0, fontSize: 16 }}>Pro (V2 roadmap)</h2>
             <p style={{ margin: "6px 0 0 0", fontSize: 12, color: "#cbd5f5" }}>
-              For individual project managers and consultants.
+              Planned for a future release—not required in V1.
             </p>
             <p style={{ margin: "14px 0 8px 0", fontSize: 22, fontWeight: 600 }}>$29/month</p>
             <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: "#e5e7eb", lineHeight: 1.6 }}>
@@ -143,9 +143,9 @@ export default function PricingPage() {
               padding: 20,
             }}
           >
-            <h2 style={{ margin: 0, fontSize: 16 }}>Team</h2>
+            <h2 style={{ margin: 0, fontSize: 16 }}>Team (V2 roadmap)</h2>
             <p style={{ margin: "6px 0 0 0", fontSize: 12, color: "#64748b" }}>
-              For delivery teams and small consultancies.
+              Planned for a future release—not required in V1.
             </p>
             <p style={{ margin: "14px 0 8px 0", fontSize: 22, fontWeight: 600 }}>$99/month</p>
             <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: "#334155", lineHeight: 1.6 }}>

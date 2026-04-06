@@ -27,12 +27,12 @@ export function isProUser(tier: PlanTier | null | undefined): boolean {
   return tier === "PRO";
 }
 
-const FREE_SET = new Set<string>(FREE_SECTION_KEYS);
-export function canAccessSection(key: string, tier: PlanTier | null | undefined): boolean {
-  if (FREE_SET.has(key)) return true;
-  return isProUser(tier);
+/** V1: all sections and exports are free; restore tier checks in V2. */
+export function canAccessSection(_key: string, _tier: PlanTier | null | undefined): boolean {
+  return true;
 }
 
-export function canDownloadWord(tier: PlanTier | null | undefined): boolean {
-  return isProUser(tier);
+/** V1: Word export allowed for all; gate in V2 if needed. */
+export function canDownloadWord(_tier: PlanTier | null | undefined): boolean {
+  return true;
 }
