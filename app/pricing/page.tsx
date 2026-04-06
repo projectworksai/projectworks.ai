@@ -35,8 +35,9 @@ export default function PricingPage() {
               color: "#64748b",
             }}
           >
-            <strong>Plan Forge V1</strong> includes full execution plans, Word export, and MS Project / Primavera
-            schedule CSVs for everyone. The Pro, Team, and Enterprise rows below describe options we may offer in V2.
+            <strong>Plan Forge V1</strong> includes full execution plans, Word export, and Microsoft Project XML
+            schedules (for MS Project and Primavera P6 import) for everyone. The Pro, Team, and Enterprise rows below
+            describe options we may offer in V2.
           </p>
         </header>
 
@@ -65,7 +66,7 @@ export default function PricingPage() {
             <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: "#334155", lineHeight: 1.6 }}>
               <li>Full project plans (progressive and signed-in workflows)</li>
               <li>Word (.docx) export</li>
-              <li>Schedule CSV for MS Project and Primavera</li>
+              <li>Schedule as Microsoft Project XML (opens in Project; import into Primavera P6)</li>
               <li>Risk matrix CSV export</li>
             </ul>
           </article>

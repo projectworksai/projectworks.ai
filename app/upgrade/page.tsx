@@ -35,8 +35,8 @@ export default function UpgradePage() {
           Plan Forge V1
         </h1>
         <p style={{ margin: "0 0 16px 0", color: "#64748b", fontSize: 14, lineHeight: 1.55 }}>
-          This release includes full project plans, Word export, and CSV schedule downloads for Microsoft Project and
-          Primavera for everyone—no upgrade required.
+          This release includes full project plans, Word export, and Microsoft Project XML schedule files for Microsoft
+          Project and Primavera P6 (import as Microsoft Project XML) for everyone—no upgrade required.
         </p>
         <p style={{ margin: "0 0 24px 0", color: "#64748b", fontSize: 14, lineHeight: 1.55 }}>
           Optional paid plans and team features are planned for a future V2. Questions? Reach the team at{" "}

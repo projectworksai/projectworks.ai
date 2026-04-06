@@ -22,6 +22,7 @@ import {
   getIndexContentForTable,
   parseIndexLine,
 } from "@/lib/parser";
+import { buildMicrosoftProjectXml } from "@/lib/schedule-export";
 
 const SPACE_AFTER_PARAGRAPH = 200;
 const SPACE_AFTER_HEADING = 280;
@@ -1073,7 +1074,7 @@ async function buildDocx(plan: PlanPayload): Promise<Buffer> {
           new Paragraph({
             children: [
               new TextRun({
-                text: "Schedule download reference: use MS Project or Primavera CSV exports for full task-level import.",
+                text: "Schedule download reference: use Microsoft Project XML from the output panel (Primavera P6: Import → Microsoft Project XML).",
                 font: "Calibri",
                 size: 21,
               }),
@@ -1173,6 +1174,24 @@ export async function POST(req: Request) {
         headers: {
           "Content-Type": "text/csv; charset=utf-8",
           "Content-Disposition": 'attachment; filename="project-schedule.csv"',
+        },
+      });
+    }
+
+    if (format === "schedule_msproject_xml" || format === "schedule_primavera_xml") {
+      const projectName =
+        typeof body?.projectName === "string" && body.projectName.trim()
+          ? body.projectName.trim()
+          : undefined;
+      const xml = buildMicrosoftProjectXml(plan, { projectStartDate, projectName });
+      const safeName =
+        (projectName || "schedule").replace(/[/\\?*:|"]/g, "-").slice(0, 80) || "schedule";
+      const suffix = format === "schedule_msproject_xml" ? "microsoft-project" : "primavera-p6-import";
+      const filename = `${safeName}-${suffix}.xml`;
+      return new NextResponse(xml, {
+        headers: {
+          "Content-Type": "application/xml; charset=utf-8",
+          "Content-Disposition": `attachment; filename="${filename}"`,
         },
       });
     }

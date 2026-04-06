@@ -393,7 +393,9 @@ export default function Home() {
             : "",
           appendixReferenceNotes: [
             sourceDocs.length > 0 ? `Referenced attachments: ${sourceDocs.join("; ")}` : "",
-            schedule ? "Schedule downloads: MS Project and Primavera are available as CSV exports from this output panel." : "",
+            schedule
+              ? "Schedule downloads: Microsoft Project XML and Primavera P6 (import as Microsoft Project XML) are available from this output panel."
+              : "",
             risk ? "Risk matrix download: Excel-compatible CSV is available from this output panel." : "",
             compliance && Array.isArray((compliance as Record<string, unknown>).sourceReferences)
               ? `Compliance references: ${((compliance as Record<string, unknown>).sourceReferences as Array<Record<string, unknown>>)
@@ -448,7 +450,9 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           plan: planToUse,
-          format: "schedule_csv",
+          format:
+            target === "msproject" ? "schedule_msproject_xml" : "schedule_primavera_xml",
+          projectName: projectName.trim() || undefined,
         }),
       });
       if (!res.ok) {
@@ -460,8 +464,8 @@ export default function Home() {
       const a = document.createElement("a");
       a.href = url;
       const safeBase = (projectName || "export").replace(/[/\\?*:|"]/g, "-");
-      const suffix = target === "msproject" ? "-ms-project" : "-primavera";
-      a.download = `project-schedule-${safeBase}${suffix}.csv`;
+      const suffix = target === "msproject" ? "microsoft-project" : "primavera-p6-import";
+      a.download = `${safeBase}-${suffix}.xml`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
