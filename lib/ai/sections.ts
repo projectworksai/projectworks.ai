@@ -376,7 +376,8 @@ Include main procurement categories.`,
 }
 Constraints:
 - Include 5-10 risks.
-- likelihood and severity MUST be integers 1-5 (1 = lowest, 5 = highest).
+- likelihood MUST be integer 1-5: 1 = Very Unlikely, 2 = Unlikely, 3 = Possible, 4 = Likely, 5 = Very Likely.
+- severity MUST be integer 1-5: 1 = Negligible, 2 = Minor, 3 = Moderate, 4 = Significant, 5 = Severe.
 - riskScore MUST equal likelihood * severity.
 - Keep fields specific to the project and aligned with good construction/non-construction project practice.`,
 

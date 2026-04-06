@@ -10,6 +10,7 @@ import {
 } from "@/lib/parser";
 import { SECTION_DISPLAY_NAMES } from "@/lib/parser";
 import { detectProjectType, getDomainsByProjectType } from "@/lib/project-type";
+import { RiskAssessmentMatrix } from "@/app/components/RiskAssessmentMatrix";
 
 export default function Home() {
   const { data: session, status, update } = useSession();
@@ -1408,57 +1409,27 @@ export default function Home() {
                       ? d.riskRegister
                       : syntheticFromRisks;
 
-                    const likelihoodLabels = ["Rare", "Unlikely", "Possible", "Likely", "Almost Certain"];
-                    const severityLabels = ["Low", "Moderate", "Medium", "High", "Very High"];
-
-                    const counts: number[][] = Array.from({ length: 5 }, () => Array.from({ length: 5 }, () => 0));
-                    if (riskRegister.length > 0) {
-                      for (const r of riskRegister as Array<Record<string, unknown>>) {
-                        const lik = typeof r.likelihood === "number" ? r.likelihood : Number(r.likelihood);
-                        const sev = typeof r.severity === "number" ? r.severity : Number(r.severity);
-                        const likIdx = Number.isFinite(lik) ? lik - 1 : -1;
-                        const sevIdx = Number.isFinite(sev) ? sev - 1 : -1;
-                        if (likIdx >= 0 && likIdx < 5 && sevIdx >= 0 && sevIdx < 5) counts[sevIdx][likIdx] += 1;
-                      }
-                    }
+                    const showAssessmentMatrix =
+                      overall.length > 0 ||
+                      riskRegister.length > 0 ||
+                      (Array.isArray(d.risks) && d.risks.length > 0);
 
                     content = (
                       <>
                         {overall && <p style={{ margin: "0 0 8px 0" }}>{overall}</p>}
 
+                        {showAssessmentMatrix && (
+                          <RiskAssessmentMatrix
+                            register={
+                              riskRegister.length > 0
+                                ? (riskRegister as Array<{ likelihood?: unknown; severity?: unknown }>)
+                                : undefined
+                            }
+                          />
+                        )}
+
                         {riskRegister.length > 0 && (
                           <>
-                            <p style={{ margin: "0 0 6px 0", fontWeight: 600 }}>Risk matrix (5×5)</p>
-                            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
-                              <thead>
-                                <tr>
-                                  <th style={{ textAlign: "left", padding: "6px 6px", borderBottom: "1px solid #e2e8f0", color: "#475569", width: 90 }}>Severity \\ Likelihood</th>
-                                  {likelihoodLabels.map((lab, i) => (
-                                    <th key={i} style={{ padding: "6px 6px", borderBottom: "1px solid #e2e8f0", color: "#475569" }}>
-                                      {i + 1}
-                                    </th>
-                                  ))}
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {severityLabels.map((sevLab, sevIdx) => (
-                                  <tr key={sevIdx}>
-                                    <td style={{ padding: "6px 6px", borderBottom: "1px solid #f1f5f9", color: "#64748b", fontWeight: 600 }}>{sevIdx + 1}</td>
-                                    {likelihoodLabels.map((_, likIdx) => {
-                                      const n = counts[sevIdx][likIdx] || 0;
-                                      const intensity = sevIdx * 5 + likIdx;
-                                      const bg = n === 0 ? "#ffffff" : intensity < 8 ? "#fef3c7" : intensity < 15 ? "#fde68a" : "#fca5a5";
-                                      return (
-                                        <td key={likIdx} style={{ padding: "6px 6px", borderBottom: "1px solid #f1f5f9", textAlign: "center", background: bg, color: n === 0 ? "#94a3b8" : "#0f172a", fontWeight: 700 }}>
-                                          {n || "—"}
-                                        </td>
-                                      );
-                                    })}
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-
                             <p style={{ margin: "10px 0 6px 0", fontWeight: 600 }}>Risk register</p>
                             <div style={{ overflowX: "auto" }}>
                               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
