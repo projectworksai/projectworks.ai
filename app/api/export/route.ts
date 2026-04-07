@@ -23,6 +23,11 @@ import {
   parseIndexLine,
 } from "@/lib/parser";
 import { buildMicrosoftProjectXml } from "@/lib/schedule-export";
+import {
+  LIKELIHOOD_AXIS_LABELS,
+  RISK_ASSESSMENT_BANDS,
+  SEVERITY_AXIS_LABELS,
+} from "@/lib/risk-matrix";
 
 const SPACE_AFTER_PARAGRAPH = 200;
 const SPACE_AFTER_HEADING = 280;
@@ -194,6 +199,38 @@ function riskBandLabel(score: number): string {
   return "Low";
 }
 
+function likelihoodLabel(n: number): string {
+  if (n <= 1) return "Very Unlikely";
+  if (n === 2) return "Unlikely";
+  if (n === 3) return "Possible";
+  if (n === 4) return "Likely";
+  return "Very Likely";
+}
+
+function severityLabel(n: number): string {
+  if (n <= 1) return "Negligible";
+  if (n === 2) return "Minor";
+  if (n === 3) return "Moderate";
+  if (n === 4) return "Significant";
+  return "Severe";
+}
+
+function treatmentPriority(score: number): string {
+  if (score >= 20) return "Critical - immediate executive action";
+  if (score >= 16) return "High - management action this period";
+  if (score >= 9) return "Moderate - planned treatment";
+  if (score >= 4) return "Low-Medium - monitor and control";
+  return "Low - monitor";
+}
+
+function executiveResponse(score: number): string {
+  if (score >= 20) return "Avoid or redesign scope";
+  if (score >= 16) return "Reduce and transfer where practical";
+  if (score >= 9) return "Reduce with controls and contingency";
+  if (score >= 4) return "Control and monitor";
+  return "Accept and monitor";
+}
+
 function extractRiskRegister(plan: PlanPayload): RiskRegisterItem[] {
   const riskManagement = plan["riskManagement"];
   if (
@@ -213,8 +250,39 @@ function extractRiskRegister(plan: PlanPayload): RiskRegisterItem[] {
 function buildRiskMatrixCsv(plan: PlanPayload): string {
   const register = extractRiskRegister(plan);
   const rows: string[] = [];
+
+  const counts: number[][] = Array.from({ length: 5 }, () => Array.from({ length: 5 }, () => 0));
+  for (const r of register) {
+    const l = Number(r.likelihood);
+    const s = Number(r.severity);
+    if (Number.isFinite(l) && Number.isFinite(s) && l >= 1 && l <= 5 && s >= 1 && s <= 5) {
+      // Rows are likelihood high→low, columns severity low→high.
+      const rowIdx = 5 - Math.round(l);
+      const colIdx = Math.round(s) - 1;
+      counts[rowIdx][colIdx] += 1;
+    }
+  }
+
+  rows.push('"Risk Assessment Matrix (5x5)","","","","",""');
   rows.push(
-    "ID,Risk Description,Cause,Impact,Likelihood,Severity,Risk Score,Matrix Cell,Rating,Mitigation,Owner"
+    [
+      '"Likelihood \\ Severity"',
+      ...SEVERITY_AXIS_LABELS.map((s, i) => `"${s} (${i + 1})"`),
+    ].join(",")
+  );
+  for (let r = 0; r < LIKELIHOOD_AXIS_LABELS.length; r++) {
+    const likelihood = LIKELIHOOD_AXIS_LABELS[r];
+    const cells = SEVERITY_AXIS_LABELS.map((_, c) => {
+      const band = RISK_ASSESSMENT_BANDS[r][c];
+      const n = counts[r][c];
+      return `"${band}${n > 0 ? ` (${n})` : ""}"`;
+    });
+    rows.push([`"${likelihood}"`, ...cells].join(","));
+  }
+  rows.push("");
+  rows.push('"High-Level Risk Analysis Register","","","","","","","","","","","","",""');
+  rows.push(
+    "ID,Risk Description,Cause,Impact,Likelihood (1-5),Likelihood Band,Severity (1-5),Severity Band,Risk Score,Matrix Cell,Rating,Treatment Priority,Executive Response,Mitigation,Owner"
   );
   for (const r of register) {
     const l = Number(r.likelihood);
@@ -233,10 +301,14 @@ function buildRiskMatrixCsv(plan: PlanPayload): string {
         safe(r.cause ?? ""),
         safe(r.impact ?? ""),
         safe(Number.isFinite(l) ? l : ""),
+        safe(Number.isFinite(l) ? likelihoodLabel(Math.round(l)) : ""),
         safe(Number.isFinite(s) ? s : ""),
+        safe(Number.isFinite(s) ? severityLabel(Math.round(s)) : ""),
         safe(Number.isFinite(score) ? score : ""),
         safe(matrixCell),
         safe(Number.isFinite(score) ? riskBandLabel(score) : ""),
+        safe(Number.isFinite(score) ? treatmentPriority(score) : ""),
+        safe(Number.isFinite(score) ? executiveResponse(score) : ""),
         safe(r.mitigationStrategy ?? ""),
         safe(r.owner ?? ""),
       ].join(",")
@@ -286,7 +358,7 @@ function findOrganogramRoots(chains: string[][]): string[] {
   return [...all].filter((n) => !asChild.has(n));
 }
 
-/** Hierarchical bullets (SmartArt-ready in Word desktop: Convert to SmartArt → Hierarchy). */
+/** SmartArt-ready hierarchy lines (Word desktop: Convert to SmartArt → Hierarchy). */
 function organogramHierarchyParagraphs(organogram: string): Paragraph[] {
   const chains = parseOrganogramChains(organogram);
   if (chains.length === 0) return bodyParagraphs(organogram);
@@ -299,7 +371,7 @@ function organogramHierarchyParagraphs(organogram: string): Paragraph[] {
     new Paragraph({
       children: [
         new TextRun({
-          text: "Organisation hierarchy (SmartArt-style). In Word for desktop: select the lines below → Home → Convert to SmartArt → Hierarchy.",
+          text: "Organisation hierarchy (SmartArt-ready). In Word desktop: select indented lines below -> Home -> Convert to SmartArt -> Hierarchy.",
           font: "Calibri",
           size: 20,
           italics: true,
@@ -317,7 +389,7 @@ function organogramHierarchyParagraphs(organogram: string): Paragraph[] {
         indent: { left: depth * indentStep },
         children: [
           new TextRun({
-            text: `${depth > 0 ? "• " : ""}${node}`,
+            text: node,
             font: "Calibri",
             size: 22,
             bold: depth === 0,
@@ -337,7 +409,7 @@ function organogramHierarchyParagraphs(organogram: string): Paragraph[] {
           indent: { left: i * indentStep },
           children: [
             new TextRun({
-              text: `${i > 0 ? "• " : ""}${p}`,
+              text: p,
               font: "Calibri",
               size: 22,
               bold: i === 0,
