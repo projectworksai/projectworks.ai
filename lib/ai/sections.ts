@@ -88,12 +88,12 @@ function presetConfig(profile: "dev" | "staging" | "prod"): Omit<QualityGateConf
       minOverviewBudgetBreakdown: 5,
       minSchedulePhases: 5,
       minScheduleMilestones: 5,
-      minScheduleTasks: 14,
+      minScheduleTasks: 18,
       minResourcesRoles: 5,
       minResourcesLabour: 4,
       minResourcesContacts: 4,
       minOrganogramChars: 25,
-      minPlantItems: 5,
+      minPlantItems: 12,
       minQualityInspectionItems: 8,
       minQualityHoldPoints: 4,
       minQualityStandards: 3,
@@ -114,12 +114,12 @@ function presetConfig(profile: "dev" | "staging" | "prod"): Omit<QualityGateConf
     minOverviewBudgetBreakdown: 3,
     minSchedulePhases: 4,
     minScheduleMilestones: 4,
-    minScheduleTasks: 10,
+    minScheduleTasks: 14,
     minResourcesRoles: 4,
     minResourcesLabour: 3,
     minResourcesContacts: 3,
     minOrganogramChars: 20,
-    minPlantItems: 4,
+    minPlantItems: 10,
     minQualityInspectionItems: 6,
     minQualityHoldPoints: 3,
     minQualityStandards: 2,
@@ -270,13 +270,13 @@ function stricterPromptForSection(section: SectionKey): string {
     return `QUALITY GATE (STRICT): budgetEstimate and budgetBreakdown are mandatory. Provide at least 5 budget breakdown lines with basis notes. If no explicit budget is supplied, infer a realistic range with assumptions.`;
   }
   if (section === "schedule") {
-    return `QUALITY GATE (STRICT): Provide 10-20 schedule tasks with project-specific multi-level WBS (e.g. 1.1, 1.2, 2.1). Avoid generic labels.`;
+    return `QUALITY GATE (STRICT): Provide 18-35 schedule tasks with project-specific multi-level WBS (2-4 levels, e.g. 1.1, 1.2.1, 3.4.2). Cover full lifecycle from mobilisation to commissioning/handover. Avoid generic labels.`;
   }
   if (section === "resources") {
     return `QUALITY GATE (STRICT): Include complete organogram (PM/PE/supervisor hierarchy chains), 4+ roles, labourBreakdown; contacts may use role-only rows with empty phone/email if names unknown.`;
   }
   if (section === "plantAndEquipment") {
-    return `QUALITY GATE (STRICT): Plant/equipment must include quantity and capacity/spec for major items, tied to project activities.`;
+    return `QUALITY GATE (STRICT): Plant/equipment must include complete inventory from small tools to major machines, with quantity and capacity/spec, tied to project activities/phases.`;
   }
   if (section === "qualityManagement") {
     return `QUALITY GATE (STRICT): Include practical ITP and hold points mapped to scope activities and standards.`;
@@ -331,8 +331,8 @@ Be specific to the project.`,
   "keyDates": [{"label": "date label", "week": number}, ...] or [],
   "tasks": [{"id": "1", "name": "Task name", "phase": "Phase name", "wbs": "1.1", "durationDays": number, "startOffsetDays": number, "dependencies": ["id of predecessor"]}, ...]
 }
-Include at least 3-5 phases and 3-5 milestones. tasks must be a flat list for MS Project/Primavera: id (string), name, phase, wbs, durationDays, startOffsetDays (days from project start), dependencies (array of predecessor task ids). Use numbers for durations and weeks.
-WBS must be detailed and project-specific (multi-level where relevant, not generic).`,
+Include at least 5-8 phases and 5-10 milestones. tasks must be a flat list for MS Project/Primavera: id (string), name, phase, wbs, durationDays, startOffsetDays (days from project start), dependencies (array of predecessor task ids). Use numbers for durations and weeks.
+Provide 18-35 tasks with practical sequencing, realistic predecessors, and WBS depth 2-4 levels. Cover mobilisation, enabling works, core delivery packages, QA/QC/testing, defects, and handover/closeout.`,
 
   resources: `You are a project management expert. Given a project brief, return ONLY valid JSON (no markdown) with this structure:
 {
@@ -411,7 +411,8 @@ Focus on construction project quality management (for non-construction, adapt to
   "maintenanceAndAvailability": "How maintenance and availability are ensured",
   "assumptions": ["assumption 1", ...]
 }
-Be specific to the project (no generic lists). If the project is non-construction, treat this section as tools/platforms/infrastructure/resources (still use the same JSON fields). If hybrid, include both.`,
+Be specific to the project (no generic lists). Include complete inventory from small tools/hand tools to largest machines/plant used across phases, with practical capacities/specs and quantities.
+If the project is non-construction, treat this section as tools/platforms/infrastructure/resources (still use the same JSON fields). If hybrid, include both.`,
 
   constructionMethodology: `You are a project management expert. Given a project brief, return ONLY valid JSON (no markdown) with this structure:
 {

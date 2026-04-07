@@ -460,13 +460,24 @@ export default function Home() {
         const errData = await res.json().catch(() => ({}));
         throw new Error(errData.error || "Schedule export failed");
       }
+      const safeBase = (projectName || "export").replace(/[/\\?*:|"]/g, "-");
+      const suffix = target === "msproject" ? "microsoft-project" : "primavera-p6-import";
+      const fileName = `${safeBase}-${suffix}.xml`;
       const blob = await res.blob();
+
+      // Best-effort native Open/Save chooser on supported Windows environments.
+      const nav = navigator as Navigator & {
+        msSaveOrOpenBlob?: (blob: Blob, defaultName?: string) => boolean;
+      };
+      if (target === "msproject" && typeof nav.msSaveOrOpenBlob === "function") {
+        nav.msSaveOrOpenBlob(blob, fileName);
+        return;
+      }
+
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      const safeBase = (projectName || "export").replace(/[/\\?*:|"]/g, "-");
-      const suffix = target === "msproject" ? "microsoft-project" : "primavera-p6-import";
-      a.download = `${safeBase}-${suffix}.xml`;
+      a.download = fileName;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
